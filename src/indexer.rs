@@ -111,7 +111,7 @@ impl Indexer {
             // Save data
             if self.last_saved_time.elapsed() > SAVE_FILE_TIMEOUT {
                 self.last_saved_time = Instant::now();
-                let current_block_height = current_block.0.clone();
+                let current_block_height = current_block.0;
                 let data_file = self.data_file.clone();
                 let data = self.data.lock().unwrap().clone();
                 tokio::spawn(async move {

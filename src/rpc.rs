@@ -336,14 +336,20 @@ impl RPC {
                     let res = self.get_actions_data(actions);
                     // Added predecessor account
                     if res.is_action_found {
-                        results.logs.push(IndexedResultLog {
-                            block_height,
-                            actions: res.log,
-                        });
-
                         results.accounts.insert(signer_id.clone());
                         results.accounts.insert(receipt.predecessor_id.clone());
                         results.accounts.insert(receipt.receiver_id.clone());
+
+                        let mut log = res.log;
+                        if !log.is_empty() {
+                            log[0].accounts.push(signer_id.clone());
+                            log[0].accounts.push(receipt.predecessor_id.clone());
+                            log[0].accounts.push(receipt.receiver_id.clone());
+                        }
+                        results.logs.push(IndexedResultLog {
+                            block_height,
+                            actions: log,
+                        });
                     }
                     for account in res.accounts {
                         results.accounts.insert(account);
