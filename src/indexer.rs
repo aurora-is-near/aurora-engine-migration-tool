@@ -100,18 +100,28 @@ impl Indexer {
         println!("Starting height: {:?}", last_block);
 
         loop {
-            let current_block = rpc.get_block(BlockKind::Latest).await?;
+            let current_block = if let Ok(block) = rpc.get_block(BlockKind::Latest).await {
+                block
+            } else {
+                // Do not fail
+                continue;
+            };
             let last_block = { self.data.lock().unwrap().last_block };
             // Skip, if block already exists
             if last_block >= current_block.0 {
                 continue;
             }
             // Check, do we need fetch history data or force check from some block height
-            let (height, chunks) = if self.force_index_from_block.is_some() {
-                rpc.get_block(BlockKind::Height(last_block + 1)).await?
-            } else if self.fetch_history {
+            let (height, chunks) = if self.force_index_from_block.is_some() || self.fetch_history {
                 if current_block.0 - last_block > 0 {
-                    rpc.get_block(BlockKind::Height(last_block + 1)).await?
+                    if let Ok(block) = rpc.get_block(BlockKind::Height(last_block + 1)).await {
+                        block
+                    } else {
+                        // If block not found do not fail, just increment height
+                        let mut data = self.data.lock().unwrap();
+                        data.last_block = last_block + 1;
+                        continue;
+                    }
                 } else {
                     current_block.clone()
                 }
