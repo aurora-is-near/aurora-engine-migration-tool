@@ -31,3 +31,9 @@ index-latest: build-index
 
 index-history: build-index
 	@${BIN}  indexer -H
+	
+index-stat: build-index
+	@${BIN}  indexer --stat
+	
+index-fullstat: build-index
+	@${BIN}  indexer --fullstat

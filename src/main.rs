@@ -34,6 +34,14 @@ async fn main() -> anyhow::Result<()> {
                         .action(ArgAction::SetTrue),
                 )
                 .arg(
+                    arg!(-s --stat "Show short indexing statistic")
+                        .action(ArgAction::SetTrue),
+                )
+                .arg(
+                    arg!(--fullstat "Show full indexing statistic")
+                        .action(ArgAction::SetTrue),
+                )
+                .arg(
                     arg!(-b --block <BLOCK_HEIGHT> "Start indexing from specific block")
                         .value_parser(value_parser!(u64)),
                 ),
@@ -72,10 +80,17 @@ async fn main() -> anyhow::Result<()> {
         }
         Some(("indexer", cmd)) => {
             let history = cmd.get_flag("history");
+            let stat = cmd.get_flag("stat");
+            let fullstat = cmd.get_flag("fullstat");
             let block = cmd.get_one::<u64>("block").copied();
-            Indexer::new("data.borsh".into(), history, block)
-                .run()
-                .await?;
+            let mut indexer = Indexer::new("data.borsh".into(), history, block);
+            if stat {
+                indexer.stats(false);
+            } else if fullstat {
+                indexer.stats(true);
+            } else {
+                indexer.run().await?
+            }
         }
         Some(("migrate", cmd)) => {
             let data_file = cmd.get_one::<PathBuf>("file").expect("Expected data file");
