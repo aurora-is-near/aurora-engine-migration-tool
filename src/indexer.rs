@@ -14,6 +14,7 @@ const SAVE_FILE_TIMEOUT: Duration = Duration::from_secs(60);
 pub struct IndexerData {
     pub first_block: BlockHeight,
     pub last_block: BlockHeight,
+    pub current_block: BlockHeight,
     pub missed_blocks: HashSet<BlockHeight>,
     pub data: IndexedData,
 }
@@ -32,7 +33,7 @@ impl Indexer {
         // If file doesn't exist just return default data
         let data = std::fs::read(&data_file).unwrap_or_default();
         let mut data: IndexerData = IndexerData::try_from_slice(&data[..]).unwrap_or_default();
-        println!("Previous data: {:#?}\n", data);
+
         if let Some(height) = block_height {
             data.last_block = height - 1;
         }
@@ -42,6 +43,19 @@ impl Indexer {
             last_saved_time: Instant::now(),
             fetch_history,
             force_index_from_block: block_height,
+        }
+    }
+
+    pub fn stats(&self, extend: bool) {
+        let data = self.data.lock().unwrap();
+        println!("First block: {:?}", data.first_block);
+        println!("Last block: {:?}", data.last_block);
+        println!("Current block: {:?}", data.current_block);
+        println!("Missed block: {:?}", data.missed_blocks);
+        println!("Accounts: {:?}", data.data.accounts.len());
+        println!("Proofs: {:?}", data.data.proofs.len());
+        if extend {
+            println!("Log: {:#?}", data.data.logs);
         }
     }
 
@@ -58,12 +72,14 @@ impl Indexer {
         height: BlockHeight,
         indexed_data: IndexedData,
         missed_blocks: HashSet<BlockHeight>,
+        current_block: BlockHeight,
     ) {
         let mut data = self.data.lock().unwrap();
         if data.first_block == 0 {
             data.first_block = height;
         }
         data.last_block = height;
+        data.current_block = current_block;
         for account in indexed_data.accounts {
             data.data.accounts.insert(account);
         }
@@ -106,7 +122,12 @@ impl Indexer {
             std::io::stdout().flush().expect("Flush failed");
 
             let indexed_data = rpc.get_chunk_indexed_data(chunks, height).await;
-            self.set_indexed_data(height, indexed_data, rpc.unresolved_blocks.clone());
+            self.set_indexed_data(
+                height,
+                indexed_data,
+                rpc.unresolved_blocks.clone(),
+                current_block.0,
+            );
 
             // Save data
             if self.last_saved_time.elapsed() > SAVE_FILE_TIMEOUT {
