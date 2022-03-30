@@ -312,6 +312,16 @@ impl RPC {
                 if res.is_action_found {
                     results.accounts.insert(tx.signer_id.clone());
                     results.accounts.insert(AURORA_CONTRACT.parse().unwrap());
+
+                    let mut log = res.log;
+                    if !log.is_empty() {
+                        log[0].accounts.push(tx.signer_id.clone());
+                        log[0].accounts.push(AURORA_CONTRACT.parse().unwrap());
+                    }
+                    results.logs.push(IndexedResultLog {
+                        block_height,
+                        actions: log,
+                    });
                 }
                 for account in res.accounts {
                     results.accounts.insert(account);
