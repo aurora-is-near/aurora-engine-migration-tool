@@ -46,10 +46,10 @@ impl Indexer {
     }
 
     /// Save indexed data
-    fn save_data(data: IndexerData, data_file: &PathBuf) {
+    fn save_data(data: IndexerData, data_file: &PathBuf, current_block_height: BlockHeight) {
         std::fs::write(data_file, data.try_to_vec().expect("Failed serialize"))
             .expect("Failed save indexed data");
-        println!(" [SAVE]");
+        println!(" [SAVE: {:?}]", current_block_height);
     }
 
     /// Set current index data
@@ -97,10 +97,10 @@ impl Indexer {
                 if current_block.0 - last_block > 0 {
                     rpc.get_block(BlockKind::Height(last_block + 1)).await?
                 } else {
-                    current_block
+                    current_block.clone()
                 }
             } else {
-                current_block
+                current_block.clone()
             };
             print!("\rHeight: {:?}", height);
             std::io::stdout().flush().expect("Flush failed");
@@ -111,10 +111,11 @@ impl Indexer {
             // Save data
             if self.last_saved_time.elapsed() > SAVE_FILE_TIMEOUT {
                 self.last_saved_time = Instant::now();
+                let current_block_height = current_block.0.clone();
                 let data_file = self.data_file.clone();
                 let data = self.data.lock().unwrap().clone();
                 tokio::spawn(async move {
-                    Self::save_data(data, &data_file);
+                    Self::save_data(data, &data_file, current_block_height);
                 });
             }
         }

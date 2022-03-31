@@ -182,12 +182,12 @@ impl RPC {
 
             let mut res = self.parse_action_argument(method_name.clone(), args);
             result.is_action_found = true;
-            result.accounts.append(&mut res.0);
             result.log.push(ActionResultLog {
-                accounts: res.0,
+                accounts: res.0.clone(),
                 proof: res.1.clone().unwrap_or_default(),
                 method: method_name,
             });
+            result.accounts.append(&mut res.0);
             if let Some(proof) = res.1 {
                 result.proofs.push(proof);
             }
@@ -310,11 +310,6 @@ impl RPC {
                 let res = self.get_actions_data(tx.actions.clone());
                 // Added predecessor account
                 if res.is_action_found {
-                    results.logs.push(IndexedResultLog {
-                        block_height,
-                        actions: res.log,
-                    });
-
                     results.accounts.insert(tx.signer_id.clone());
                     results.accounts.insert(AURORA_CONTRACT.parse().unwrap());
                 }

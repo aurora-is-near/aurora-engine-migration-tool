@@ -22,8 +22,9 @@ build-index:
 	@cargo build --release --features mainnet-archival
 	
 index: build-index
-	@${BIN} indexer --block 79373253
+#	@${BIN} indexer --block 79373253
 #	@${BIN} indexer --block 79377726
+	@${BIN} indexer --block 80733632
 
 index-latest: build-index
 	@${BIN}  indexer 
