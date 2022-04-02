@@ -242,7 +242,7 @@ impl RPC {
                 (vec![], None)
             }
             "finish_deposit" => {
-                #[derive(BorshDeserialize)]
+                #[derive(Debug, Clone, BorshDeserialize)]
                 pub struct FinishDepositArgs {
                     pub new_owner_id: AccountId,
                     pub amount: u128,

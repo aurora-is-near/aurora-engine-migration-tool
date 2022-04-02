@@ -28,11 +28,12 @@ pub struct Indexer {
 
 impl Indexer {
     /// Init new indexer
-    pub fn new(data_file: PathBuf, fetch_history: bool, block: Option<u64>) -> Self {
+    pub fn new(data_file: PathBuf, fetch_history: bool, block_height: Option<BlockHeight>) -> Self {
         // If file doesn't exist just return default data
         let data = std::fs::read(&data_file).unwrap_or_default();
         let mut data: IndexerData = IndexerData::try_from_slice(&data[..]).unwrap_or_default();
-        if let Some(height) = block {
+        println!("Previous data: {:#?}\n", data);
+        if let Some(height) = block_height {
             data.last_block = height - 1;
         }
         Self {
@@ -40,13 +41,15 @@ impl Indexer {
             data_file,
             last_saved_time: Instant::now(),
             fetch_history,
-            force_index_from_block: block,
+            force_index_from_block: block_height,
         }
     }
 
     /// Save indexed data
-    fn save_data(_data: IndexerData) {
-        println!(" save_data");
+    fn save_data(data: IndexerData, data_file: &PathBuf) {
+        std::fs::write(data_file, data.try_to_vec().expect("Failed serialize"))
+            .expect("Failed save indexed data");
+        println!(" [SAVE]");
     }
 
     /// Set current index data
@@ -61,7 +64,14 @@ impl Indexer {
             data.first_block = height;
         }
         data.last_block = height;
-        data.data = indexed_data;
+        for account in indexed_data.accounts {
+            data.data.accounts.insert(account);
+        }
+        for proof in indexed_data.proofs {
+            data.data.proofs.insert(proof);
+        }
+        let mut logs = indexed_data.logs;
+        data.data.logs.append(&mut logs);
         data.missed_blocks = missed_blocks;
     }
 
@@ -101,9 +111,10 @@ impl Indexer {
             // Save data
             if self.last_saved_time.elapsed() > SAVE_FILE_TIMEOUT {
                 self.last_saved_time = Instant::now();
+                let data_file = self.data_file.clone();
                 let data = self.data.lock().unwrap().clone();
                 tokio::spawn(async move {
-                    Self::save_data(data);
+                    Self::save_data(data, &data_file);
                 });
             }
         }

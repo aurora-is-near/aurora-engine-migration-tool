@@ -27,3 +27,6 @@ index: build-index
 
 index-latest: build-index
 	@${BIN}  indexer 
+
+index-history: build-index
+	@${BIN}  indexer -H
