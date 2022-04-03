@@ -15,7 +15,7 @@ jobs:
       - name: Clone the repository
         uses: actions/checkout@v3
       - name: Cargo build
-        run: cargo build --release
+        run: cargo build --release --features mainnet-archival
 
 env:
   CARGO_TERM_COLOR: always
