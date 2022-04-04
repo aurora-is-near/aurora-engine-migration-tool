@@ -1,6 +1,6 @@
 use crate::rpc::{BlockKind, IndexedData, RPC};
 use borsh::{BorshDeserialize, BorshSerialize};
-use near_primitives::types::{AccountId, BlockHeight};
+use near_primitives::types::BlockHeight;
 use std::collections::HashSet;
 use std::io::Write;
 use std::path::PathBuf;
@@ -45,15 +45,7 @@ impl Indexer {
     }
 
     /// Save indexed data
-    fn save_data(
-        data: Arc<Mutex<IndexerData>>,
-        height: BlockHeight,
-        _accounts: HashSet<AccountId>,
-        _proofs: HashSet<String>,
-    ) {
-        let mut data = data.lock().unwrap();
-        data.last_block = height;
-
+    fn save_data(_data: IndexerData) {
         println!(" save_data");
     }
 
@@ -89,7 +81,7 @@ impl Indexer {
                 continue;
             }
             // Check, do we need fetch history data or force check from some block height
-            let block = if self.force_index_from_block.is_some() {
+            let (height, chunks) = if self.force_index_from_block.is_some() {
                 rpc.get_block(BlockKind::Height(last_block + 1)).await?
             } else if self.fetch_history {
                 if current_block.0 - last_block > 0 {
@@ -100,18 +92,18 @@ impl Indexer {
             } else {
                 current_block
             };
-            print!("\rHeight: {:?}", block.0);
+            print!("\rHeight: {:?}", height);
             std::io::stdout().flush().expect("Flush failed");
 
-            let indexed_data = rpc.get_chunk_indexed_data(block.1, block.0).await;
-            self.set_indexed_data(block.0, indexed_data, rpc.unresolved_blocks.clone());
+            let indexed_data = rpc.get_chunk_indexed_data(chunks, height).await;
+            self.set_indexed_data(height, indexed_data, rpc.unresolved_blocks.clone());
 
             // Save data
             if self.last_saved_time.elapsed() > SAVE_FILE_TIMEOUT {
                 self.last_saved_time = Instant::now();
-                //let data = data.clone();
+                let data = self.data.lock().unwrap().clone();
                 tokio::spawn(async move {
-                    //Self::save_data(data, block.0, out.0, out.1);
+                    Self::save_data(data);
                 });
             }
         }
