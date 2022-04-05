@@ -70,7 +70,6 @@ pub type TransactionView = (AccountId, CryptoHash);
 
 pub struct RPC {
     pub client: JsonRpcClient,
-    pub latest_block_height: BlockHeight,
     pub unresolved_blocks: HashSet<BlockHeight>,
 }
 
@@ -110,25 +109,16 @@ pub struct IndexedData {
 impl RPC {
     /// Init RPC with final (latest) flock height
     pub async fn new() -> anyhow::Result<Self> {
-        // Init ner-rpc client
-        let client = JsonRpcClient::connect(NEAR_RPC_ADDRESS);
-
-        // Get final (latest) block
-        let block_reference = near_primitives::types::BlockReference::Finality(
-            near_primitives::types::Finality::Final,
-        );
-        let block = client
-            .call(methods::block::RpcBlockRequest {
-                block_reference: block_reference.clone(),
-            })
-            .await
-            .expect(" Failed get latest block");
-
         Ok(Self {
-            client,
-            latest_block_height: block.header.height,
+            // Init ner-rpc client
+            client: JsonRpcClient::connect(NEAR_RPC_ADDRESS),
             unresolved_blocks: HashSet::new(),
         })
+    }
+
+    /// Set missed blocks for RPC runner
+    pub fn set_missed_blocks(&mut self, missed_blocks: HashSet<BlockHeight>) {
+        self.unresolved_blocks = missed_blocks;
     }
 
     /// Wrap rpc-client calls.
@@ -368,6 +358,10 @@ impl RPC {
                     }
                 }
             }
+        }
+        // Flow passed successfully - remove block
+        if self.unresolved_blocks.contains(&block_height) {
+            self.unresolved_blocks.remove(&block_height);
         }
         results
     }

@@ -53,28 +53,34 @@ impl Indexer {
     ) {
         let mut data = data.lock().unwrap();
         data.last_block = height;
-        if data.first_block == 0 {
-            data.first_block = height;
-        }
+
         println!(" save_data");
     }
 
     /// Set current index data
-    pub fn set_indexed_data(&mut self, height: BlockHeight, data: IndexedData) {
+    pub fn set_indexed_data(
+        &mut self,
+        height: BlockHeight,
+        indexed_data: IndexedData,
+        missed_blocks: HashSet<BlockHeight>,
+    ) {
         let mut data = self.data.lock().unwrap();
+        if data.first_block == 0 {
+            data.first_block = height;
+        }
         data.last_block = height;
+        data.data = indexed_data;
+        data.missed_blocks = missed_blocks;
     }
 
     /// Run indexing
     pub async fn run(&mut self) -> anyhow::Result<()> {
         let mut rpc = RPC::new().await?;
-        let data = Arc::new(Mutex::new(self.data.clone()));
-        {
-            println!(
-                "Starting height: {:?}",
-                self.data.lock().unwrap().last_block
-            );
-        }
+        let missed_blocks = { self.data.lock().unwrap().missed_blocks.clone() };
+        rpc.set_missed_blocks(missed_blocks);
+        let last_block = { self.data.lock().unwrap().last_block };
+        println!("Starting height: {:?}", last_block);
+
         loop {
             let current_block = rpc.get_block(BlockKind::Latest).await?;
             let last_block = { self.data.lock().unwrap().last_block };
@@ -98,12 +104,12 @@ impl Indexer {
             std::io::stdout().flush().expect("Flush failed");
 
             let indexed_data = rpc.get_chunk_indexed_data(block.1, block.0).await;
-            self.set_indexed_data(block.0, indexed_data);
+            self.set_indexed_data(block.0, indexed_data, rpc.unresolved_blocks.clone());
 
             // Save data
             if self.last_saved_time.elapsed() > SAVE_FILE_TIMEOUT {
                 self.last_saved_time = Instant::now();
-                let data = data.clone();
+                //let data = data.clone();
                 tokio::spawn(async move {
                     //Self::save_data(data, block.0, out.0, out.1);
                 });
