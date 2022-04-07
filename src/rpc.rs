@@ -1,6 +1,7 @@
 //! # RPC
 //! RPC toolset for effective communication with near-rpc for specific network.
 //!
+use borsh::{BorshDeserialize, BorshSerialize};
 use near_jsonrpc_client::{methods, JsonRpcClient, MethodCallResult};
 use near_jsonrpc_primitives::types::query::QueryResponseKind;
 use near_primitives::hash::CryptoHash;
@@ -78,11 +79,14 @@ pub enum BlockKind {
     Height(BlockHeight),
 }
 
+#[derive(Debug, Default, Clone, BorshSerialize, BorshDeserialize)]
 pub struct ActionResultLog {
     pub accounts: Vec<AccountId>,
     pub proof: String,
     pub method: String,
 }
+
+#[derive(Debug, Default, Clone, BorshSerialize, BorshDeserialize)]
 pub struct ActionResult {
     pub accounts: Vec<AccountId>,
     pub proofs: Vec<String>,
@@ -90,11 +94,13 @@ pub struct ActionResult {
     pub log: Vec<ActionResultLog>,
 }
 
+#[derive(Debug, Default, Clone, BorshSerialize, BorshDeserialize)]
 pub struct IndexedResultLog {
     pub block_height: BlockHeight,
     pub actions: Vec<ActionResultLog>,
 }
 
+#[derive(Debug, Default, Clone, BorshSerialize, BorshDeserialize)]
 pub struct IndexedData {
     pub accounts: HashSet<AccountId>,
     pub proofs: HashSet<String>,
@@ -206,7 +212,6 @@ impl RPC {
         method: String,
         args: Vec<u8>,
     ) -> (Vec<AccountId>, Option<String>) {
-        use borsh::BorshDeserialize;
         use serde::Deserialize;
 
         match method.as_str() {

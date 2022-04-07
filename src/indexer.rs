@@ -1,6 +1,5 @@
-use crate::rpc::{BlockKind, RPC};
+use crate::rpc::{BlockKind, IndexedData, RPC};
 use borsh::{BorshDeserialize, BorshSerialize};
-use near_primitives::hash::CryptoHash;
 use near_primitives::types::{AccountId, BlockHeight};
 use std::collections::HashSet;
 use std::io::Write;
@@ -11,30 +10,16 @@ use tokio::time::Instant;
 
 const SAVE_FILE_TIMEOUT: Duration = Duration::from_secs(60);
 
-#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
-pub struct TxData {
-    hash: CryptoHash,
-    action: String,
-    output: Vec<String>,
-}
-
-#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
-pub struct BlockData {
-    pub block_height: BlockHeight,
-    pub transactions: Vec<TxData>,
-}
-
 #[derive(Debug, Default, Clone, BorshSerialize, BorshDeserialize)]
 pub struct IndexerData {
-    pub blocks: Vec<BlockData>,
     pub first_block: BlockHeight,
     pub last_block: BlockHeight,
     pub missed_blocks: HashSet<BlockHeight>,
-    pub missed_txs: HashSet<CryptoHash>,
+    pub data: IndexedData,
 }
 
 pub struct Indexer {
-    pub data: IndexerData,
+    pub data: Arc<Mutex<IndexerData>>,
     pub data_file: PathBuf,
     pub last_saved_time: Instant,
     pub fetch_history: bool,
@@ -51,7 +36,7 @@ impl Indexer {
             data.last_block = height - 1;
         }
         Self {
-            data,
+            data: Arc::new(Mutex::new(data)),
             data_file,
             last_saved_time: Instant::now(),
             fetch_history,
@@ -75,29 +60,34 @@ impl Indexer {
     }
 
     /// Set current index data
-    pub fn set_indexed_data(&mut self, height: BlockHeight) {
-        self.data.last_block = height;
+    pub fn set_indexed_data(&mut self, height: BlockHeight, data: IndexedData) {
+        let mut data = self.data.lock().unwrap();
+        data.last_block = height;
     }
 
     /// Run indexing
     pub async fn run(&mut self) -> anyhow::Result<()> {
         let mut rpc = RPC::new().await?;
         let data = Arc::new(Mutex::new(self.data.clone()));
-        println!("Starting height: {:?}", self.data.last_block);
+        {
+            println!(
+                "Starting height: {:?}",
+                self.data.lock().unwrap().last_block
+            );
+        }
         loop {
             let current_block = rpc.get_block(BlockKind::Latest).await?;
+            let last_block = { self.data.lock().unwrap().last_block };
             // Skip, if block already exists
-            if self.data.last_block >= current_block.0 {
+            if last_block >= current_block.0 {
                 continue;
             }
             // Check, do we need fetch history data or force check from some block height
             let block = if self.force_index_from_block.is_some() {
-                rpc.get_block(BlockKind::Height(self.data.last_block + 1))
-                    .await?
+                rpc.get_block(BlockKind::Height(last_block + 1)).await?
             } else if self.fetch_history {
-                if current_block.0 - self.data.last_block > 0 {
-                    rpc.get_block(BlockKind::Height(self.data.last_block + 1))
-                        .await?
+                if current_block.0 - last_block > 0 {
+                    rpc.get_block(BlockKind::Height(last_block + 1)).await?
                 } else {
                     current_block
                 }
@@ -107,8 +97,8 @@ impl Indexer {
             print!("\rHeight: {:?}", block.0);
             std::io::stdout().flush().expect("Flush failed");
 
-            let out = rpc.get_chunk_indexed_data(block.1, block.0).await;
-            self.set_indexed_data(block.0);
+            let indexed_data = rpc.get_chunk_indexed_data(block.1, block.0).await;
+            self.set_indexed_data(block.0, indexed_data);
 
             // Save data
             if self.last_saved_time.elapsed() > SAVE_FILE_TIMEOUT {
