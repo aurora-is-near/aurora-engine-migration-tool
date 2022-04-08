@@ -115,7 +115,7 @@ impl Indexer {
                 self.last_saved_time = Instant::now();
                 let data = data.clone();
                 tokio::spawn(async move {
-                    Self::save_data(data, block.0, out.0, out.1);
+                    //Self::save_data(data, block.0, out.0, out.1);
                 });
             }
         }

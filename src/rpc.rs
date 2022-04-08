@@ -272,19 +272,18 @@ impl RPC {
         }
     }
 
-    /// Get transactions and receipts indexed data from chunks
+    /// Get transactions and receipts indexed data from chunks.
+    /// Return indexed data including actions log.
     pub async fn get_chunk_indexed_data(
         &mut self,
         chunks: Vec<ChunkHeaderView>,
         block_height: BlockHeight,
-    ) -> (HashSet<AccountId>, HashSet<String>) {
-        let _results = IndexedData {
+    ) -> IndexedData {
+        let mut results = IndexedData {
             accounts: HashSet::new(),
             proofs: HashSet::new(),
             logs: vec![],
         };
-        let mut accounts: HashSet<AccountId> = HashSet::new();
-        let mut proofs: HashSet<String> = HashSet::new();
 
         // Fetch all chunks from block
         for chunk in chunks {
@@ -316,14 +315,19 @@ impl RPC {
                 let res = self.get_actions_data(tx.actions.clone());
                 // Added predecessor account
                 if res.is_action_found {
-                    accounts.insert(tx.signer_id.clone());
-                    accounts.insert(AURORA_CONTRACT.parse().unwrap());
+                    results.logs.push(IndexedResultLog {
+                        block_height,
+                        actions: res.log,
+                    });
+
+                    results.accounts.insert(tx.signer_id.clone());
+                    results.accounts.insert(AURORA_CONTRACT.parse().unwrap());
                 }
                 for account in res.accounts {
-                    accounts.insert(account);
+                    results.accounts.insert(account);
                 }
                 for proof in res.proofs {
-                    proofs.insert(proof);
+                    results.proofs.insert(proof);
                 }
             }
 
@@ -342,20 +346,25 @@ impl RPC {
                     let res = self.get_actions_data(actions);
                     // Added predecessor account
                     if res.is_action_found {
-                        accounts.insert(signer_id.clone());
-                        accounts.insert(receipt.predecessor_id.clone());
-                        accounts.insert(receipt.receiver_id.clone());
+                        results.logs.push(IndexedResultLog {
+                            block_height,
+                            actions: res.log,
+                        });
+
+                        results.accounts.insert(signer_id.clone());
+                        results.accounts.insert(receipt.predecessor_id.clone());
+                        results.accounts.insert(receipt.receiver_id.clone());
                     }
                     for account in res.accounts {
-                        accounts.insert(account);
+                        results.accounts.insert(account);
                     }
                     for proof in res.proofs {
-                        proofs.insert(proof);
+                        results.proofs.insert(proof);
                     }
                 }
             }
         }
-        (accounts, proofs)
+        results
     }
 
     /// Commit transaction and wait respond. It should retry if it's fail
