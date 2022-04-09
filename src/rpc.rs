@@ -71,8 +71,6 @@ pub struct RPC {
     pub client: JsonRpcClient,
     pub latest_block_height: BlockHeight,
     pub unresolved_blocks: HashSet<BlockHeight>,
-    pub unresolved_chunks: HashSet<CryptoHash>,
-    pub unresolved_txs: HashSet<CryptoHash>,
 }
 
 pub enum BlockKind {
@@ -124,8 +122,6 @@ impl RPC {
             client,
             latest_block_height: block.header.height,
             unresolved_blocks: HashSet::new(),
-            unresolved_chunks: HashSet::new(),
-            unresolved_txs: HashSet::new(),
         })
     }
 
@@ -204,31 +200,6 @@ impl RPC {
         result
     }
 
-    pub async fn get_output(
-        &self,
-        req: methods::tx::RpcTransactionStatusRequest,
-    ) -> Vec<Vec<String>> {
-        if let Ok(status_info) = self.call(req).await {
-            match status_info.status {
-                FinalExecutionStatus::SuccessValue(_) => {
-                    let mut data = vec![status_info.transaction_outcome.outcome.logs];
-                    let mut receipts_outcome = status_info
-                        .receipts_outcome
-                        .iter()
-                        .map(|v| v.outcome.logs.clone())
-                        .collect();
-
-                    data.append(&mut receipts_outcome);
-                    data
-                }
-                _ => vec![],
-            }
-        } else {
-            print_log("Failed get output");
-            vec![]
-        }
-    }
-
     /// Parse action arguments and return accounts and proof keys
     pub fn parse_action_argument(
         &self,
@@ -305,7 +276,7 @@ impl RPC {
     pub async fn get_chunk_indexed_data(
         &mut self,
         chunks: Vec<ChunkHeaderView>,
-        _block_height: BlockHeight,
+        block_height: BlockHeight,
     ) -> (HashSet<AccountId>, HashSet<String>) {
         let _results = IndexedData {
             accounts: HashSet::new(),
@@ -330,7 +301,8 @@ impl RPC {
                 chunk_data
             } else {
                 print_log("Failed get chunk");
-                self.unresolved_chunks.insert(chunk.chunk_hash);
+                // Set block as unresolved
+                self.unresolved_blocks.insert(block_height);
                 continue;
             };
 
@@ -344,14 +316,6 @@ impl RPC {
                 let res = self.get_actions_data(tx.actions.clone());
                 // Added predecessor account
                 if res.is_action_found {
-                    let _status_req = methods::tx::RpcTransactionStatusRequest {
-                        transaction_info: methods::tx::TransactionInfo::TransactionId {
-                            hash: tx.hash,
-                            account_id: tx.signer_id.clone(),
-                        },
-                    };
-                    //println!(" TX -> {:?}\n", self.get_output(status_req).await);
-
                     accounts.insert(tx.signer_id.clone());
                     accounts.insert(AURORA_CONTRACT.parse().unwrap());
                 }
