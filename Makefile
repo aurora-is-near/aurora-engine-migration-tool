@@ -1,23 +1,29 @@
+BIN=target/release/aurora-engine-migration-tool
+
 check:
 	@cargo fmt -- --check
-	@cargo clippy --no-default-features --features mainnet -- -D warnings
-	@cargo clippy --no-default-features --features testnet -- -D warnings
+	@cargo clippy --features mainnet -- -D warnings
+	@cargo clippy --features mainnet-archival -- -D warnings
+	@cargo clippy --features testnet -- -D warnings
 
-build-release:
-	@cargo build --release
+build-mainnet-release:
+	@cargo build --features mainnet --release
+
+build-testnet-release:
+	@cargo build --features testnet --release
 	
-run:
-	@cargo run --release
+run: build-mainnet-release
+	@${BIN} --features mainnet --release
 	
-migrate: build-release
-	@target/release/aurora-engine-migration-tool migrate --account ${ACCOUNT_ID} --key ${ACCOUNT_KEY}  --file contract_state.borsh
+migrate-testnet: build-testnet-release
+	@${BIN} migrate --account ${ACCOUNT_ID} --key ${ACCOUNT_KEY}  --file contract_state.borsh
 
 build-index:
-	@cargo build --release --no-default-features --features mainnet
+	@cargo build --release --features mainnet-archival
 	
 index: build-index
-	@target/release/aurora-engine-migration-tool  indexer --block 79373253
-#	@target/release/aurora-engine-migration-tool  indexer --block 79377726
+	@${BIN} indexer --block 79373253
+#	@${BIN} indexer --block 79377726
 
 index-latest: build-index
-	@target/release/aurora-engine-migration-tool  indexer 
+	@${BIN}  indexer 

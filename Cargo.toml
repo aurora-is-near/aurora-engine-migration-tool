@@ -29,7 +29,7 @@ clap = { version = "4.0", features = ["cargo"] }
 near-crypto = "0.15"
 
 [features]
-default = ["testnet"]
 mainnet = ["log"]
 testnet = ["log"]
+mainnet-archival = ["log"]
 log = []

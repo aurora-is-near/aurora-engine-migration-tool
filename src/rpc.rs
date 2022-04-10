@@ -12,6 +12,9 @@ use std::collections::HashSet;
 use std::time::Duration;
 
 #[cfg(feature = "mainnet")]
+const NEAR_RPC_ADDRESS: &str = near_jsonrpc_client::NEAR_MAINNET_RPC_URL;
+
+#[cfg(feature = "mainnet-archival")]
 const NEAR_RPC_ADDRESS: &str = near_jsonrpc_client::NEAR_MAINNET_ARCHIVAL_RPC_URL;
 
 #[cfg(feature = "testnet")]
