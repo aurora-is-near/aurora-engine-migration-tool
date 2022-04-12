@@ -89,6 +89,17 @@ pub struct ActionResult {
     pub log: Vec<ActionResultLog>,
 }
 
+pub struct IndexedResultLog {
+    pub block_height: BlockHeight,
+    pub actions: Vec<ActionResultLog>,
+}
+
+pub struct IndexedData {
+    pub accounts: HashSet<AccountId>,
+    pub proofs: HashSet<String>,
+    pub logs: Vec<IndexedResultLog>,
+}
+
 impl RPC {
     /// Init RPC with final (latest) flock height
     pub async fn new() -> anyhow::Result<Self> {
@@ -291,7 +302,13 @@ impl RPC {
     pub async fn get_chunk_indexed_data(
         &mut self,
         chunks: Vec<ChunkHeaderView>,
+        _block_height: BlockHeight,
     ) -> (HashSet<AccountId>, HashSet<String>) {
+        let _results = IndexedData {
+            accounts: HashSet::new(),
+            proofs: HashSet::new(),
+            logs: vec![],
+        };
         let mut accounts: HashSet<AccountId> = HashSet::new();
         let mut proofs: HashSet<String> = HashSet::new();
 
