@@ -77,10 +77,16 @@ pub enum BlockKind {
     Height(BlockHeight),
 }
 
+pub struct ActionResultLog {
+    pub accounts: Vec<AccountId>,
+    pub proof: String,
+    pub method: String,
+}
 pub struct ActionResult {
     pub accounts: Vec<AccountId>,
     pub proofs: Vec<String>,
     pub is_action_found: bool,
+    pub log: Vec<ActionResultLog>,
 }
 
 impl RPC {
@@ -154,6 +160,7 @@ impl RPC {
             accounts: vec![],
             proofs: vec![],
             is_action_found: false,
+            log: vec![],
         };
         for action in actions {
             // Check action method and filter it
@@ -167,9 +174,14 @@ impl RPC {
                 continue;
             }
 
-            let mut res = self.parse_action_argument(method_name, args);
+            let mut res = self.parse_action_argument(method_name.clone(), args);
             result.is_action_found = true;
             result.accounts.append(&mut res.0);
+            result.log.push(ActionResultLog {
+                accounts: res.0,
+                proof: res.1.clone().unwrap_or_default(),
+                method: method_name,
+            });
             if let Some(proof) = res.1 {
                 result.proofs.push(proof);
             }
@@ -275,8 +287,8 @@ impl RPC {
         }
     }
 
-    /// Get transactions outcome from chunks
-    pub async fn get_transactions_outcome(
+    /// Get transactions and receipts indexed data from chunks
+    pub async fn get_chunk_indexed_data(
         &mut self,
         chunks: Vec<ChunkHeaderView>,
     ) -> (HashSet<AccountId>, HashSet<String>) {

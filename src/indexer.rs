@@ -107,7 +107,7 @@ impl Indexer {
             print!("\rHeight: {:?}", block.0);
             std::io::stdout().flush().expect("Flush failed");
 
-            let out = rpc.get_transactions_outcome(block.1).await;
+            let out = rpc.get_chunk_indexed_data(block.1).await;
             self.set_indexed_data(block.0);
 
             // Save data
