@@ -138,7 +138,7 @@ impl RPC {
             .call(methods::block::RpcBlockRequest { block_reference })
             .await
             .map_err(|e| {
-                println!(" Failed get block");
+                print_log("Failed get block");
                 if let BlockKind::Height(height) = bloch_kind {
                     self.unresolved_blocks.insert(height);
                 }
@@ -178,7 +178,10 @@ impl RPC {
         result
     }
 
-    async fn get_output(&self, req: methods::tx::RpcTransactionStatusRequest) -> Vec<Vec<String>> {
+    pub async fn get_output(
+        &self,
+        req: methods::tx::RpcTransactionStatusRequest,
+    ) -> Vec<Vec<String>> {
         if let Ok(status_info) = self.call(req).await {
             match status_info.status {
                 FinalExecutionStatus::SuccessValue(_) => {
@@ -195,7 +198,7 @@ impl RPC {
                 _ => vec![],
             }
         } else {
-            println!("Failed get output");
+            print_log("Failed get output");
             vec![]
         }
     }
@@ -218,10 +221,10 @@ impl RPC {
                     pub memo: Option<String>,
                 }
                 if let Ok(res) = serde_json::from_slice::<FtTransferArgs>(&args[..]) {
+                    print_log("ft_transfer");
                     (vec![res.receiver_id], None)
                 } else {
-                    println!(" Failed deserialize FtTransferArgs");
-                    serde_json::from_slice::<FtTransferArgs>(&args[..]).unwrap();
+                    print_log(" Failed deserialize FtTransferArgs");
                     (vec![], None)
                 }
             }
@@ -235,15 +238,15 @@ impl RPC {
                 }
                 let _ = serde_json::from_slice::<FtTransferCallArgs>(&args[..]).unwrap();
                 if let Ok(res) = serde_json::from_slice::<FtTransferCallArgs>(&args[..]) {
+                    print_log("ft_transfer_call");
                     (vec![res.receiver_id], None)
                 } else {
-                    println!(" Failed deserialize FtTransferCallArgs",);
-                    serde_json::from_slice::<FtTransferCallArgs>(&args[..]).unwrap();
+                    print_log("Failed deserialize FtTransferCallArgs");
                     (vec![], None)
                 }
             }
             "withdraw" => {
-                println!(" Withdraw");
+                print_log(" Withdraw");
                 (vec![], None)
             }
             "finish_deposit" => {
@@ -257,18 +260,15 @@ impl RPC {
                     pub msg: Option<Vec<u8>>,
                 }
                 if let Ok(res) = FinishDepositArgs::try_from_slice(&args[..]) {
-                    println!(
-                        " Finish deposit: {}, {}. Proof key: {}",
-                        res.new_owner_id, res.relayer_id, res.proof_key
-                    );
+                    print_log("finish_deposit");
                     (vec![res.new_owner_id, res.relayer_id], Some(res.proof_key))
                 } else {
-                    println!(" Failed deserialize FinishDepositArgs");
+                    print_log("Failed deserialize FinishDepositArgs");
                     (vec![], None)
                 }
             }
             "deposit" => {
-                println!(" Deposit");
+                print_log("deposit");
                 (vec![], None)
             }
             _ => (vec![], None),
@@ -297,7 +297,7 @@ impl RPC {
             {
                 chunk_data
             } else {
-                println!("Failed get chunk: {:?}", chunk.chunk_hash);
+                print_log("Failed get chunk");
                 self.unresolved_chunks.insert(chunk.chunk_hash);
                 continue;
             };
@@ -312,13 +312,13 @@ impl RPC {
                 let res = self.get_actions_data(tx.actions.clone());
                 // Added predecessor account
                 if res.is_action_found {
-                    let status_req = methods::tx::RpcTransactionStatusRequest {
+                    let _status_req = methods::tx::RpcTransactionStatusRequest {
                         transaction_info: methods::tx::TransactionInfo::TransactionId {
                             hash: tx.hash,
                             account_id: tx.signer_id.clone(),
                         },
                     };
-                    println!(" TX -> {:?}\n", self.get_output(status_req).await);
+                    //println!(" TX -> {:?}\n", self.get_output(status_req).await);
 
                     accounts.insert(tx.signer_id.clone());
                     accounts.insert(AURORA_CONTRACT.parse().unwrap());
