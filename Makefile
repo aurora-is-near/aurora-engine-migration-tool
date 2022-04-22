@@ -1,6 +1,7 @@
 check:
 	@cargo fmt -- --check
-	@cargo clippy -- -D warnings
+	@cargo clippy --no-default-features --features mainnet -- -D warnings
+	@cargo clippy --no-default-features --features testnet -- -D warnings
 
 build-release:
 	@cargo build --release

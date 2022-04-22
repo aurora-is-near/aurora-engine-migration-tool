@@ -30,5 +30,6 @@ near-crypto = "0.15"
 
 [features]
 default = ["testnet"]
-mainnet = []
-testnet = []
+mainnet = ["log"]
+testnet = ["log"]
+log = []
