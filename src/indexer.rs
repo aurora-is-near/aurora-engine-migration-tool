@@ -67,7 +67,8 @@ impl Indexer {
     pub fn set_indexed_data(
         data: Arc<Mutex<IndexerData>>,
         height: BlockHeight,
-        _output: HashSet<AccountId>,
+        _accounts: HashSet<AccountId>,
+        _proofs: HashSet<String>,
     ) {
         let mut data = data.lock().unwrap();
         data.last_block = height;
@@ -108,7 +109,7 @@ impl Indexer {
 
             {
                 let data = data.clone();
-                Self::set_indexed_data(data, block.0, out);
+                Self::set_indexed_data(data, block.0, out.0, out.1);
             }
 
             // Save data

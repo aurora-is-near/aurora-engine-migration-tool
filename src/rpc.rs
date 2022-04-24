@@ -1,5 +1,6 @@
 //! # RPC
 //! RPC toolset for effective communication with near-rpc for specific network.
+//!
 use near_jsonrpc_client::{methods, JsonRpcClient, MethodCallResult};
 use near_jsonrpc_primitives::types::query::QueryResponseKind;
 use near_primitives::hash::CryptoHash;
@@ -79,7 +80,7 @@ pub enum BlockKind {
 pub struct ActionResult {
     pub accounts: Vec<AccountId>,
     pub proofs: Vec<String>,
-    pub is_action_found: boolc,
+    pub is_action_found: bool,
 }
 
 impl RPC {
@@ -148,9 +149,12 @@ impl RPC {
 
     /// Get action output for chunk transaction (including receipt output)
     /// It includes: Accounts, Proof keys
-    pub fn get_actions_data(&mut self, actions: Vec<ActionView>) -> (Vec<AccountId>, Vec<String>) {
-        let mut account_results: Vec<AccountId> = vec![];
-        let mut proofs_results: Vec<String> = vec![];
+    pub fn get_actions_data(&mut self, actions: Vec<ActionView>) -> ActionResult {
+        let mut result = ActionResult {
+            accounts: vec![],
+            proofs: vec![],
+            is_action_found: false,
+        };
         for action in actions {
             // Check action method and filter it
             let (method_name, args) = match action {
@@ -164,9 +168,10 @@ impl RPC {
             }
             println!("\n\nMethod: {:?} ", method_name);
             let mut res = self.parse_action_argument(method_name, args);
-            account_results.append(&mut res.0);
+            result.is_action_found = false;
+            result.accounts.append(&mut res.0);
             if let Some(proof) = res.1 {
-                proofs_results.push(proof);
+                result.proofs.push(proof);
             }
         }
 
@@ -195,7 +200,7 @@ impl RPC {
         //     continue;
         // };
 
-        (account_results, proofs_results)
+        result
     }
 
     /// Parse action arguments and return accounts and proof keys
@@ -272,9 +277,10 @@ impl RPC {
     pub async fn get_transactions_outcome(
         &mut self,
         chunks: Vec<ChunkHeaderView>,
-    ) -> HashSet<AccountId> {
-        let mut results: HashSet<AccountId> = HashSet::new();
-        results.insert(AURORA_CONTRACT.parse().unwrap());
+    ) -> (HashSet<AccountId>, HashSet<String>) {
+        let mut accounts: HashSet<AccountId> = HashSet::new();
+        let mut proofs: HashSet<String> = HashSet::new();
+        accounts.insert(AURORA_CONTRACT.parse().unwrap());
         // Fetch all chunks from block
         for chunk in chunks {
             // Get chunk data
@@ -301,9 +307,15 @@ impl RPC {
                 }
                 // Get actions and proof keys from transaction
                 let res = self.get_actions_data(tx.actions.clone());
-                //tx.signer_id.clone()/
-                for account in res.0 {
-                    results.insert(account);
+                // Added predecessor account
+                if res.is_action_found {
+                    accounts.insert(tx.signer_id.clone());
+                }
+                for account in res.accounts {
+                    accounts.insert(account);
+                }
+                for proof in res.proofs {
+                    proofs.insert(proof);
                 }
             }
 
@@ -320,15 +332,21 @@ impl RPC {
                 } = receipt.receipt.clone()
                 {
                     let res = self.get_actions_data(actions);
-                    for account in res.0 {
-                        results.insert(receipt.predecessor_id.clone());
-                        results.insert(signer_id.clone());
-                        results.insert(account);
+                    // Added predecessor account
+                    if res.is_action_found {
+                        accounts.insert(signer_id.clone());
+                        accounts.insert(receipt.predecessor_id.clone());
+                    }
+                    for account in res.accounts {
+                        accounts.insert(account);
+                    }
+                    for proof in res.proofs {
+                        proofs.insert(proof);
                     }
                 }
             }
         }
-        results
+        (accounts, proofs)
     }
 
     /// Commit transaction and wait respond. It should retry if it's fail
