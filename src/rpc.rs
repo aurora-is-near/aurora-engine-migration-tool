@@ -189,7 +189,9 @@ impl RPC {
 
     /// Parse action arguments and return accounts
     pub fn parse_action_argument(&self, method: String, args: Vec<u8>) -> Vec<AccountId> {
+        use borsh::BorshDeserialize;
         use serde::Deserialize;
+
         match method.as_str() {
             "ft_transfer" => {
                 #[derive(Debug, Deserialize)]
@@ -221,7 +223,25 @@ impl RPC {
                 }
             }
             "withdraw" => vec![],
-            "finish_deposit" => vec![],
+            "finish_deposit" => {
+                //https://github.com/aurora-is-near/aurora-eth-connector/actions/runs/3653185111/jobs/6189231661
+                #[derive(BorshDeserialize)]
+                pub struct FinishDepositArgs {
+                    pub new_owner_id: AccountId,
+                    pub amount: Balance,
+                    pub proof_key: String,
+                    pub relayer_id: AccountId,
+                    pub fee: Balance,
+                    pub msg: Option<Vec<u8>>,
+                }
+                if let Ok(res) = FinishDepositArgs::try_from_slice(&args[..]) {
+                    vec![res.new_owner_id, res.relayer_id]
+                    // res.proof_key
+                } else {
+                    println!("Failed deserialize FinishDepositArgs");
+                    vec![]
+                }
+            }
             _ => vec![],
         }
     }
