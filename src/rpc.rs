@@ -4,7 +4,7 @@ use near_jsonrpc_client::{methods, JsonRpcClient, MethodCallResult};
 use near_jsonrpc_primitives::types::query::QueryResponseKind;
 use near_primitives::hash::CryptoHash;
 use near_primitives::transaction::{Action, FunctionCallAction, Transaction};
-use near_primitives::types::{AccountId, BlockHeight, BlockReference};
+use near_primitives::types::{AccountId, Balance, BlockHeight, BlockReference};
 use near_primitives::views::{ActionView, ChunkHeaderView, FinalExecutionStatus, ReceiptEnumView};
 use std::collections::HashSet;
 use std::time::Duration;
@@ -141,11 +141,11 @@ impl RPC {
     }
 
     /// Get action output for chunk transaction (including receipt output)
-    pub async fn get_actions_accounts(&mut self, actions: Vec<ActionView>) -> Vec<AccountId> {
-        let results: Vec<AccountId> = vec![];
+    pub fn get_actions_accounts(&mut self, actions: Vec<ActionView>) -> Vec<AccountId> {
+        let mut results: Vec<AccountId> = vec![];
         for action in actions {
             // Check action method and filter it
-            let (method_name, _args) = match action {
+            let (method_name, args) = match action {
                 ActionView::FunctionCall {
                     method_name, args, ..
                 } => (method_name, args),
@@ -155,6 +155,8 @@ impl RPC {
                 continue;
             }
             println!("\n\n{:?} ", method_name);
+            let mut accounts = self.parse_action_argument(method_name, args);
+            results.append(&mut accounts);
         }
 
         // TODO: decide do we need Tx outcome
@@ -183,6 +185,34 @@ impl RPC {
         // };
 
         results
+    }
+
+    /// Parse action arguments and return accounts
+    pub fn parse_action_argument(&self, method: String, args: Vec<u8>) -> Vec<AccountId> {
+        use serde::Deserialize;
+        match method.as_str() {
+            "ft_transfer" => {
+                #[derive(Debug, Deserialize)]
+                pub struct FtTransferArgs {
+                    pub receiver_id: AccountId,
+                    pub amount: Balance,
+                    pub memo: Option<String>,
+                }
+                if let Ok(res) = serde_json::from_slice::<FtTransferArgs>(&args[..]) {
+                    vec![res.receiver_id]
+                } else {
+                    println!("Failed deserialize FtTransferArgs");
+                    vec![]
+                }
+            }
+            "ft_transfer_call" => {
+                // TransferCallCallArgs
+                vec![]
+            }
+            "withdraw" => vec![],
+            "finish_deposit" => vec![],
+            _ => vec![],
+        }
     }
 
     /// Get transactions outcome from chunks
@@ -218,7 +248,7 @@ impl RPC {
                 }
                 results.insert(tx.signer_id.clone());
                 // Get actions list from transaction
-                let accounts = self.get_actions_accounts(tx.actions.clone()).await;
+                let accounts = self.get_actions_accounts(tx.actions.clone());
                 for account in accounts {
                     results.insert(account);
                 }
@@ -232,7 +262,7 @@ impl RPC {
                 } = receipt.receipt.clone()
                 {
                     results.insert(signer_id);
-                    let accounts = self.get_actions_accounts(actions).await;
+                    let accounts = self.get_actions_accounts(actions);
                     for account in accounts {
                         results.insert(account);
                     }
