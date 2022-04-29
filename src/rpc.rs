@@ -141,8 +141,10 @@ impl RPC {
     }
 
     /// Get action output for chunk transaction (including receipt output)
-    pub fn get_actions_accounts(&mut self, actions: Vec<ActionView>) -> Vec<AccountId> {
-        let mut results: Vec<AccountId> = vec![];
+    /// It includes: Accounts, Proof keys
+    pub fn get_actions_data(&mut self, actions: Vec<ActionView>) -> (Vec<AccountId>, Vec<String>) {
+        let mut account_results: Vec<AccountId> = vec![];
+        let mut proofs_results: Vec<String> = vec![];
         for action in actions {
             // Check action method and filter it
             let (method_name, args) = match action {
@@ -154,9 +156,12 @@ impl RPC {
             if !ACTION_METHODS.contains(&method_name.as_str()) {
                 continue;
             }
-            println!("\n\n{:?} ", method_name);
-            let mut accounts = self.parse_action_argument(method_name, args);
-            results.append(&mut accounts);
+            println!("\n\nMethod: {:?} ", method_name);
+            let mut res = self.parse_action_argument(method_name, args);
+            account_results.append(&mut res.0);
+            if let SomeO(proof) = res.1 {
+                proofs_results.append(&mut proof);
+            }
         }
 
         // TODO: decide do we need Tx outcome
@@ -184,11 +189,15 @@ impl RPC {
         //     continue;
         // };
 
-        results
+        (account_results, proofs_results)
     }
 
-    /// Parse action arguments and return accounts
-    pub fn parse_action_argument(&self, method: String, args: Vec<u8>) -> Vec<AccountId> {
+    /// Parse action arguments and return accounts and proof keys
+    pub fn parse_action_argument(
+        &self,
+        method: String,
+        args: Vec<u8>,
+    ) -> (Vec<AccountId>, Option<String>) {
         use borsh::BorshDeserialize;
         use serde::Deserialize;
 
@@ -201,10 +210,11 @@ impl RPC {
                     pub memo: Option<String>,
                 }
                 if let Ok(res) = serde_json::from_slice::<FtTransferArgs>(&args[..]) {
-                    vec![res.receiver_id]
+                    println!("FtTransfer: {}", res.receiver_id);
+                    (vec![res.receiver_id], None)
                 } else {
                     println!("Failed deserialize FtTransferArgs");
-                    vec![]
+                    (vec![], None)
                 }
             }
             "ft_transfer_call" => {
@@ -216,15 +226,18 @@ impl RPC {
                     pub msg: String,
                 }
                 if let Ok(res) = serde_json::from_slice::<FtTransferCallArgs>(&args[..]) {
-                    vec![res.receiver_id]
+                    println!("FtTransferCall: {}", res.receiver_id);
+                    (vec![res.receiver_id], None)
                 } else {
                     println!("Failed deserialize FtTransferCallArgs");
-                    vec![]
+                    (vec![], None)
                 }
             }
-            "withdraw" => vec![],
+            "withdraw" => {
+                println!("Withdraw");
+                (vec![], None)
+            }
             "finish_deposit" => {
-                //https://github.com/aurora-is-near/aurora-eth-connector/actions/runs/3653185111/jobs/6189231661
                 #[derive(BorshDeserialize)]
                 pub struct FinishDepositArgs {
                     pub new_owner_id: AccountId,
@@ -235,14 +248,17 @@ impl RPC {
                     pub msg: Option<Vec<u8>>,
                 }
                 if let Ok(res) = FinishDepositArgs::try_from_slice(&args[..]) {
-                    vec![res.new_owner_id, res.relayer_id]
-                    // res.proof_key
+                    println!(
+                        "Finish deposit: {}, {}. Proof key: {}",
+                        res.new_owner_id, res.relayer_id, res.proof_key
+                    );
+                    (vec![res.new_owner_id, res.relayer_id], Some(res.proof_key))
                 } else {
                     println!("Failed deserialize FinishDepositArgs");
-                    vec![]
+                    (vec![], None)
                 }
             }
-            _ => vec![],
+            _ => (vec![], None),
         }
     }
 
@@ -278,14 +294,20 @@ impl RPC {
                     continue;
                 }
                 results.insert(tx.signer_id.clone());
-                // Get actions list from transaction
-                let accounts = self.get_actions_accounts(tx.actions.clone());
-                for account in accounts {
+                // Get actions and proof keys from transaction
+                let res = self.get_actions_data(tx.actions.clone());
+                for account in res.0 {
                     results.insert(account);
                 }
             }
-            // Fetch chunk transactions
+
+            // Fetch chunk transactions for receipts
             for receipt in &chunk_data.receipts {
+                println!(
+                    "receipt: {} [{}z]",
+                    receipt.receiver_id,
+                    receipt.predecessor_id.clone()
+                );
                 results.insert(receipt.predecessor_id.clone());
                 // Get actions accounts from receipt
                 if let ReceiptEnumView::Action {
@@ -293,8 +315,8 @@ impl RPC {
                 } = receipt.receipt.clone()
                 {
                     results.insert(signer_id);
-                    let accounts = self.get_actions_accounts(actions);
-                    for account in accounts {
+                    let res = self.get_actions_data(actions);
+                    for account in res.0 {
                         results.insert(account);
                     }
                 }
