@@ -40,10 +40,11 @@ pub struct Indexer {
     pub data_file: PathBuf,
     pub last_saved_time: Instant,
     pub fetch_history: bool,
+    pub force_index_from_block: Option<u64>,
 }
 
 impl Indexer {
-    pub fn new(data_file: PathBuf, fetch_history: bool) -> Self {
+    pub fn new(data_file: PathBuf, fetch_history: bool, block: Option<u64>) -> Self {
         // If file doesn't exist just return default data
         let data = std::fs::read(&data_file).unwrap_or_default();
         let data: IndexerData = IndexerData::try_from_slice(&data[..]).unwrap_or_default();
@@ -52,6 +53,7 @@ impl Indexer {
             data_file,
             last_saved_time: Instant::now(),
             fetch_history,
+            force_index_from_block: block,
         }
     }
 
@@ -78,8 +80,11 @@ impl Indexer {
             if self.data.last_block == current_block.0 {
                 continue;
             }
-            // Check, do we need fetch history data
-            let block = if self.fetch_history {
+            // Check, do we need fetch history data or force check from some block height
+            let block = if let Some(force_index_from_block) = self.force_index_from_block {
+                rpc.get_block(BlockKind::Height(force_index_from_block))
+                    .await?
+            } else if self.fetch_history {
                 if current_block.0 - self.data.last_block > 0 {
                     rpc.get_block(BlockKind::Height(self.data.last_block + 1))
                         .await?

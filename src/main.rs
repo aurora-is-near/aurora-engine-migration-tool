@@ -32,6 +32,10 @@ async fn main() -> anyhow::Result<()> {
                 .arg(
                     arg!(-H --history "Indexing missed historical blocks")
                         .action(ArgAction::SetTrue),
+                )
+                .arg(
+                    arg!(-b --block <BLOCK_HEIGHT> "Start indexing from specific block")
+                        .value_parser(value_parser!(u64)),
                 ),
         )
         .subcommand(
@@ -68,8 +72,10 @@ async fn main() -> anyhow::Result<()> {
         }
         Some(("indexer", cmd)) => {
             let history = cmd.get_flag("history");
-            Indexer::new("data.borsh".into(), history).run().await?;
-            // indexer::indexer(history).await?;
+            let block = cmd.get_one::<u64>("block").copied();
+            Indexer::new("data.borsh".into(), history, block)
+                .run()
+                .await?;
         }
         Some(("migrate", cmd)) => {
             let data_file = cmd.get_one::<PathBuf>("file").expect("Expected data file");

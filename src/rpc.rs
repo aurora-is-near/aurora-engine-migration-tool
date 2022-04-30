@@ -159,8 +159,8 @@ impl RPC {
             println!("\n\nMethod: {:?} ", method_name);
             let mut res = self.parse_action_argument(method_name, args);
             account_results.append(&mut res.0);
-            if let SomeO(proof) = res.1 {
-                proofs_results.append(&mut proof);
+            if let Some(proof) = res.1 {
+                proofs_results.push(proof);
             }
         }
 
