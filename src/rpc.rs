@@ -142,7 +142,11 @@ impl RPC {
 
     /// Get action output for chunk transaction (including receipt output)
     /// It includes: Accounts, Proof keys
-    pub fn get_actions_data(&mut self, actions: Vec<ActionView>) -> (Vec<AccountId>, Vec<String>) {
+    pub fn get_actions_data(
+        &mut self,
+        actions: Vec<ActionView>,
+        predecessor_id: AccountId,
+    ) -> (Vec<AccountId>, Vec<String>) {
         let mut account_results: Vec<AccountId> = vec![];
         let mut proofs_results: Vec<String> = vec![];
         for action in actions {
@@ -157,6 +161,7 @@ impl RPC {
                 continue;
             }
             println!("\n\nMethod: {:?} ", method_name);
+            account_results.push(predecessor_id.clone());
             let mut res = self.parse_action_argument(method_name, args);
             account_results.append(&mut res.0);
             if let Some(proof) = res.1 {
@@ -293,9 +298,8 @@ impl RPC {
                 if tx.receiver_id.as_str() != AURORA_CONTRACT {
                     continue;
                 }
-                results.insert(tx.signer_id.clone());
                 // Get actions and proof keys from transaction
-                let res = self.get_actions_data(tx.actions.clone());
+                let res = self.get_actions_data(tx.actions.clone(), tx.signer_id.clone());
                 for account in res.0 {
                     results.insert(account);
                 }

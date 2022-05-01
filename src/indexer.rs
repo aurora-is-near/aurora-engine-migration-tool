@@ -44,6 +44,7 @@ pub struct Indexer {
 }
 
 impl Indexer {
+    /// Init new indexer
     pub fn new(data_file: PathBuf, fetch_history: bool, block: Option<u64>) -> Self {
         // If file doesn't exist just return default data
         let data = std::fs::read(&data_file).unwrap_or_default();
@@ -57,8 +58,12 @@ impl Indexer {
         }
     }
 
-    fn save_data(_data: Arc<Mutex<IndexerData>>) {}
+    /// Save indexed data
+    fn save_data(_data: Arc<Mutex<IndexerData>>) {
+        println!("save_data");
+    }
 
+    /// Set current index data
     pub fn set_indexed_data(
         data: Arc<Mutex<IndexerData>>,
         height: BlockHeight,
@@ -66,11 +71,13 @@ impl Indexer {
     ) {
         let mut data = data.lock().unwrap();
         data.last_block = height;
+        println!("Set index data: {height}");
         if data.first_block == 0 {
             data.first_block = height;
         }
     }
 
+    /// Run indexing
     pub async fn run(&mut self) -> anyhow::Result<()> {
         let mut rpc = RPC::new().await?;
         let data = Arc::new(Mutex::new(self.data.clone()));
