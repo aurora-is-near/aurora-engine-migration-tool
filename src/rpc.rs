@@ -76,6 +76,12 @@ pub enum BlockKind {
     Height(BlockHeight),
 }
 
+pub struct ActionResult {
+    pub accounts: Vec<AccountId>,
+    pub proofs: Vec<String>,
+    pub is_action_found: boolc,
+}
+
 impl RPC {
     /// Init RPC with final (latest) flock height
     pub async fn new() -> anyhow::Result<Self> {
@@ -142,11 +148,7 @@ impl RPC {
 
     /// Get action output for chunk transaction (including receipt output)
     /// It includes: Accounts, Proof keys
-    pub fn get_actions_data(
-        &mut self,
-        actions: Vec<ActionView>,
-        predecessor_id: AccountId,
-    ) -> (Vec<AccountId>, Vec<String>) {
+    pub fn get_actions_data(&mut self, actions: Vec<ActionView>) -> (Vec<AccountId>, Vec<String>) {
         let mut account_results: Vec<AccountId> = vec![];
         let mut proofs_results: Vec<String> = vec![];
         for action in actions {
@@ -161,7 +163,6 @@ impl RPC {
                 continue;
             }
             println!("\n\nMethod: {:?} ", method_name);
-            account_results.push(predecessor_id.clone());
             let mut res = self.parse_action_argument(method_name, args);
             account_results.append(&mut res.0);
             if let Some(proof) = res.1 {
@@ -299,7 +300,8 @@ impl RPC {
                     continue;
                 }
                 // Get actions and proof keys from transaction
-                let res = self.get_actions_data(tx.actions.clone(), tx.signer_id.clone());
+                let res = self.get_actions_data(tx.actions.clone());
+                //tx.signer_id.clone()/
                 for account in res.0 {
                     results.insert(account);
                 }
@@ -312,15 +314,15 @@ impl RPC {
                     receipt.receiver_id,
                     receipt.predecessor_id.clone()
                 );
-                results.insert(receipt.predecessor_id.clone());
                 // Get actions accounts from receipt
                 if let ReceiptEnumView::Action {
                     signer_id, actions, ..
                 } = receipt.receipt.clone()
                 {
-                    results.insert(signer_id);
                     let res = self.get_actions_data(actions);
                     for account in res.0 {
+                        results.insert(receipt.predecessor_id.clone());
+                        results.insert(signer_id.clone());
                         results.insert(account);
                     }
                 }
