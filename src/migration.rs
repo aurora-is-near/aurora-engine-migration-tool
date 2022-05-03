@@ -77,7 +77,7 @@ impl Migration {
                 migration_data.clone(),
             )
             .await?;
-        println!("{msg}: {counter}");
+        print!("\r{msg}: {counter}");
         Ok(())
     }
 
@@ -107,29 +107,31 @@ impl Migration {
             MigrationCheckResult::AccountAmount(missed) => {
                 println!("{msg}: {counter} [Missed: {:?}]", missed.len())
             }
-            MigrationCheckResult::Success => println!("{msg}: {counter} [{:?}]", correctness),
+            MigrationCheckResult::Success => print!("\r{msg}: {counter} [{:?}]", correctness),
             _ => {
                 if let MigrationCheckResult::TotalSupply(_) = correctness {
-                    println!("{msg}: {counter} [Missed field: {:?}]", correctness)
+                    println!("{msg} [Missed field: {:?}]", correctness)
                 }
                 if let MigrationCheckResult::StorageUsage(_) = correctness {
-                    println!("{msg}: {counter} [Missed field: {:?}]", correctness)
+                    println!("{msg} [Missed field: {:?}]", correctness)
                 }
                 if let MigrationCheckResult::StatisticsCounter(_) = correctness {
-                    println!("{msg}: {counter} [Missed field: {:?}]", correctness)
+                    println!("{msg} [Missed field: {:?}]", correctness)
                 }
             }
         }
         Ok(())
     }
 
+    /// Run migration process
     pub async fn run(&self) -> anyhow::Result<()> {
+        // Data limit per transaction
         let limit = RECORDS_COUNT_PER_TX;
 
         // Proofs migration
         let mut i = 0;
         let mut proofs_count = 0;
-        let mut reprodusable_data_for_proofs: Vec<Vec<u8>> = vec![];
+        let mut reproducible_data_for_proofs: Vec<(Vec<u8>, usize)> = vec![];
         loop {
             let proofs = if i + limit >= self.data.proofs.len() {
                 &self.data.proofs[i..]
@@ -148,7 +150,7 @@ impl Migration {
             }
             .try_to_vec()
             .expect("Failed serialize");
-            reprodusable_data_for_proofs.push(migration_data.clone());
+            reproducible_data_for_proofs.push((migration_data.clone(), proofs_count));
 
             self.commit_migration(migration_data, "Proofs", proofs_count)
                 .await?;
@@ -162,9 +164,10 @@ impl Migration {
         assert_eq!(proofs_count, self.data.proofs.len());
 
         // Accounts migration
+        println!();
         let mut accounts: HashMap<AccountId, Balance> = HashMap::new();
         let mut accounts_count = 0;
-        let mut reprodusable_data_for_accounts: Vec<Vec<u8>> = vec![];
+        let mut reproducible_data_for_accounts: Vec<(Vec<u8>, usize)> = vec![];
         for (i, (account, amount)) in self.data.accounts.iter().enumerate() {
             let account = AccountId::try_from(account.to_string()).unwrap();
             accounts.insert(account.clone(), amount.as_u128());
@@ -182,7 +185,7 @@ impl Migration {
             }
             .try_to_vec()
             .expect("Failed serialize");
-            reprodusable_data_for_accounts.push(migration_data.clone());
+            reproducible_data_for_accounts.push((migration_data.clone(), accounts_count));
 
             self.commit_migration(migration_data, "Accounts", accounts_count)
                 .await?;
@@ -193,6 +196,7 @@ impl Migration {
         assert_eq!(self.data.accounts.len(), accounts_count);
 
         // Migrate Contract data
+        println!();
         let contract_migration_data = MigrationInputData {
             accounts: HashMap::new(),
             total_supply: Some(self.data.contract_data.total_eth_supply_on_near.as_u128()),
@@ -203,26 +207,26 @@ impl Migration {
         .try_to_vec()
         .expect("Failed serialize");
 
-        self.commit_migration(contract_migration_data.clone(), "Contract data", 0)
+        self.commit_migration(contract_migration_data.clone(), "Contract data", 1)
             .await?;
 
         //=====================================
         // Checking the correctness and integrity of data, regardless of
         // the migration process
-        proofs_count = 0;
-        for migration_data in reprodusable_data_for_proofs {
-            proofs_count += migration_data.len();
-            self.check_migration("Proofs", migration_data, proofs_count)
+
+        println!();
+        for (migration_data, counter) in reproducible_data_for_proofs {
+            self.check_migration("Proofs", migration_data, counter)
                 .await?;
         }
 
-        accounts_count = 0;
-        for migration_data in reprodusable_data_for_accounts {
-            accounts_count += migration_data.len();
-            self.check_migration("Accounts:", migration_data, accounts_count)
+        println!();
+        for (migration_data, counter) in reproducible_data_for_accounts {
+            self.check_migration("Accounts:", migration_data, counter)
                 .await?;
         }
 
+        println!();
         self.check_migration("Contract data:", contract_migration_data, 0)
             .await?;
 

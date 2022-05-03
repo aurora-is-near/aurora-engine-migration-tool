@@ -283,7 +283,7 @@ impl RPC {
 
             // If request failed for some reason - retry request
             retry += 1;
-            println!("Requst retry: {:?}", retry);
+            println!("\nRequst retry: {:?}", retry);
             // If all retries failed it's incident, just panic
             if retry > RETRIES_COUNT {
                 panic!("Failed commit tx {:?} times: {:?}", RETRIES_COUNT, res);
