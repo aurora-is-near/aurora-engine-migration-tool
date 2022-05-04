@@ -202,10 +202,19 @@ impl Migration {
         let res = MigrationCheckResult::try_from_slice(&res[..]).unwrap();
         println!("Contract data [{:?}]", res);
 
+        //=====================================
+        // Checking the correctness and integrity of data, regardless of
+        // the migration process
         proofs_count = 0;
         for migration_data in reprodusable_data_for_proofs {
             proofs_count += migration_data.len();
             self.check_migration(migration_data, proofs_count).await?;
+        }
+
+        accounts_count = 0;
+        for migration_data in reprodusable_data_for_accounts {
+            accounts_count += migration_data.len();
+            self.check_migration(migration_data, accounts_count).await?;
         }
 
         Ok(())
