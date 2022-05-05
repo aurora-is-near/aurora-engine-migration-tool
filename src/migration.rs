@@ -81,6 +81,26 @@ impl Migration {
         Ok(())
     }
 
+    /// Send request to check migration correctness
+    async fn check_migration(&self, migration_data: Vec<u8>, counter: usize) -> anyhow::Result<()> {
+        let res = self
+            .rpc
+            .request_view(
+                self.config.contract.clone(),
+                MIGRATION_CHECK_METHOD.to_string(),
+                migration_data,
+            )
+            .await?;
+        let correctness = MigrationCheckResult::try_from_slice(&res[..]).unwrap();
+        match correctness {
+            MigrationCheckResult::Proof(missed) => {
+                println!("Proofs: {:?} [Missed: {:?}]", counter, missed.len())
+            }
+            _ => println!("Proofs: {:?} [{:?}]", counter, correctness),
+        }
+        Ok(())
+    }
+
     pub async fn run(&self) -> anyhow::Result<()> {
         let limit = RECORDS_COUNT_PER_TX;
 
@@ -120,27 +140,9 @@ impl Migration {
         assert_eq!(proofs_count, self.data.proofs.len());
 
         proofs_count = 0;
-        for _ in reprodusable_data_for_proofs {
-            let res = self
-                .rpc
-                .request_view(
-                    self.config.contract.clone(),
-                    MIGRATION_CHECK_METHOD.to_string(),
-                    migration_data,
-                )
-                .await?;
-            let correctness = MigrationCheckResult::try_from_slice(&res[..]).unwrap();
-
-            if let MigrationCheckResult::Proof(missed) = correctness {
-                println!("Proofs: {:?} [Missed: {:?}]", proofs_count, missed.len());
-            } else {
-                println!("Proofs: {:?} [{:?}]", proofs_count, correctness);
-            }
-            if i + limit >= self.data.proofs.len() {
-                break;
-            } else {
-                i += limit;
-            }
+        for migration_data in reprodusable_data_for_proofs {
+            proofs_count += migration_data.len();
+            self.check_migration(migration_data, proofs_count).await?;
         }
 
         // Accounts migration
