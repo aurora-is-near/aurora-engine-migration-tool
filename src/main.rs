@@ -50,10 +50,6 @@ async fn main() -> anyhow::Result<()> {
                     arg!(-k --key <ACCOUNT_KEY> "Account private key for sign migration transactions")
                         .required(true),
                 )
-                .arg(
-                    arg!(-c --contract <CONTRACT> "Contract to migrate data")
-                        .required(true),
-                ),
         )
         .get_matches();
 
@@ -82,18 +78,11 @@ async fn main() -> anyhow::Result<()> {
                 .get_one::<String>("account")
                 .expect("Expected account-id");
             let account_key = cmd.get_one::<String>("key").expect("Expected account-key");
-            let contract = cmd
-                .get_one::<String>("contract")
-                .expect("Expected contract");
-            Migration::new(
-                data_file,
-                account_id.clone(),
-                account_key.clone(),
-                contract.clone(),
-            )
-            .await?
-            .run()
-            .await?;
+
+            Migration::new(data_file, account_id.clone(), account_key.clone())
+                .await?
+                .run()
+                .await?;
         }
         _ => (),
     }

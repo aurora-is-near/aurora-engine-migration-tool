@@ -29,6 +29,6 @@ clap = { version = "4.0", features = ["cargo"] }
 near-crypto = "0.15"
 
 [features]
-default = ["mainnet"]
+default = ["testnet"]
 mainnet = []
 testnet = []

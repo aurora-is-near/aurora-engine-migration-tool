@@ -29,6 +29,7 @@ const AURORA_CONTRACT: &str = "aurora";
 pub enum CommitTxError {
     AccessKeyFail,
     CommitFail,
+    ViewFail,
 }
 
 impl std::error::Error for CommitTxError {
@@ -42,6 +43,7 @@ impl std::fmt::Display for CommitTxError {
         match self {
             Self::AccessKeyFail => write!(f, "ERR_FAILED_GET_ACCESS_KEY"),
             Self::CommitFail => write!(f, "ERR_FAILED_COMMIT_TX"),
+            Self::ViewFail => write!(f, "ERR_FAILED_VIEW_TX"),
         }
     }
 }
@@ -240,11 +242,37 @@ impl RPC {
             signed_transaction: transaction.sign(&signer),
         };
 
-        let _ = self
+        let res = self
             .client
             .call(request)
             .await
             .map_err(|_| CommitTxError::CommitFail)?;
+
+        println!("{:#?}", res.receipts_outcome);
+        println!("{:#?}", res.status);
         Ok(())
+    }
+
+    /// Request view data for contract method
+    pub async fn request_view(
+        &self,
+        contract: String,
+        method: String,
+        args: Vec<u8>,
+    ) -> anyhow::Result<Vec<u8>> {
+        let request = methods::query::RpcQueryRequest {
+            block_reference: BlockReference::Finality(near_primitives::types::Finality::Final),
+            request: near_primitives::views::QueryRequest::CallFunction {
+                account_id: contract.parse()?,
+                method_name: method,
+                args: near_primitives::types::FunctionArgs::from(args),
+            },
+        };
+
+        let response = self.client.call(request).await?;
+        if let QueryResponseKind::CallResult(result) = response.kind {
+            return Ok(result.result);
+        }
+        Err(CommitTxError::ViewFail)?
     }
 }
