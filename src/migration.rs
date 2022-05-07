@@ -61,52 +61,56 @@ impl Migration {
         })
     }
 
+    /// Commit migration data as transaction call
+    async fn commit_migration(
+        &self,
+        migration_data: Vec<u8>,
+        msg: &str,
+        counter: usize,
+    ) -> anyhow::Result<()> {
+        self.rpc
+            .commit_tx(
+                self.config.signer_account_id.clone(),
+                self.config.signer_secret_key.clone(),
+                self.config.contract.clone(),
+                MIGRATION_METHOD.to_string(),
+                migration_data.clone(),
+            )
+            .await?;
+        println!("{msg}: {counter}");
+        Ok(())
+    }
+
     pub async fn run(&self) -> anyhow::Result<()> {
-        // Proofs migration
         let limit = RECORDS_COUNT_PER_TX;
+
+        // Proofs migration
         let mut i = 0;
         let mut proofs_count = 0;
+        let mut reprodusable_data_for_proofs: Vec<Vec<u8>> = vec![];
         loop {
             let proofs = if i + limit >= self.data.proofs.len() {
                 &self.data.proofs[i..]
             } else {
                 &self.data.proofs[i..i + limit]
-            };
+            }
+            .to_vec();
+
             proofs_count += proofs.len();
             let migration_data = MigrationInputData {
                 accounts: HashMap::new(),
                 total_supply: None,
                 account_storage_usage: None,
                 statistics_aurora_accounts_counter: None,
-                used_proofs: proofs.to_vec(),
+                used_proofs: proofs,
             }
             .try_to_vec()
             .expect("Failed serialize");
+            reprodusable_data_for_proofs.push(migration_data.clone());
 
-            self.rpc
-                .commit_tx(
-                    self.config.signer_account_id.clone(),
-                    self.config.signer_secret_key.clone(),
-                    self.config.contract.clone(),
-                    MIGRATION_METHOD.to_string(),
-                    migration_data.clone(),
-                )
+            self.commit_migration(migration_data, "Proofs", proofs_count)
                 .await?;
-            let res = self
-                .rpc
-                .request_view(
-                    self.config.contract.clone(),
-                    MIGRATION_CHECK_METHOD.to_string(),
-                    migration_data,
-                )
-                .await?;
-            let correctness = MigrationCheckResult::try_from_slice(&res[..]).unwrap();
 
-            if let MigrationCheckResult::Proof(missed) = correctness {
-                println!("Proofs: {:?} [Missed: {:?}]", proofs_count, missed.len());
-            } else {
-                println!("Proofs: {:?} [{:?}]", proofs_count, correctness);
-            }
             if i + limit >= self.data.proofs.len() {
                 break;
             } else {
@@ -115,27 +119,8 @@ impl Migration {
         }
         assert_eq!(proofs_count, self.data.proofs.len());
 
-        // Wait for one block
-        tokio::sync::sleep(std::time::Duration::from_secs(2));
-        let mut i = 0;
-        let mut proofs_count = 0;
-        loop {
-            let proofs = if i + limit >= self.data.proofs.len() {
-                &self.data.proofs[i..]
-            } else {
-                &self.data.proofs[i..i + limit]
-            };
-            proofs_count += proofs.len();
-            let migration_data = MigrationInputData {
-                accounts: HashMap::new(),
-                total_supply: None,
-                account_storage_usage: None,
-                statistics_aurora_accounts_counter: None,
-                used_proofs: proofs.to_vec(),
-            }
-            .try_to_vec()
-            .expect("Failed serialize");
-
+        proofs_count = 0;
+        for _ in reprodusable_data_for_proofs {
             let res = self
                 .rpc
                 .request_view(
