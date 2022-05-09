@@ -42,8 +42,6 @@ pub enum CommitTxError {
     CommitFail(String),
     ViewFail,
     StatusFail(String),
-    // NotStarted,
-    // Started,
 }
 
 impl std::error::Error for CommitTxError {
@@ -175,32 +173,29 @@ impl RPC {
             }
         }
 
-        // TODO: decide do we need Tx outcome
-        // let outcome = if let Ok(tx_info) = self
-        //     .call(methods::tx::RpcTransactionStatusRequest {
-        //         transaction_info: methods::tx::TransactionInfo::TransactionId {
-        //             hash: tx.hash,
-        //             account_id: tx.signer_id.clone(),
-        //         },
-        //     })
-        //     .await
-        // {
-        //     match tx_info.status {
-        //         FinalExecutionStatus::SuccessValue(_) => {
-        //             let mut data = vec![tx_info.transaction_outcome];
-        //             let mut receipts_outcome = tx_info.receipts_outcome;
-        //             data.append(&mut receipts_outcome);
-        //             data
-        //         }
-        //         _ => continue,
-        //     }
-        // } else {
-        //     println!("Failed get tx: {:?}", tx.hash);
-        //     self.unresolved_txs.insert(tx.hash);
-        //     continue;
-        // };
-
         result
+    }
+
+    async fn get_output(&self, req: methods::tx::RpcTransactionStatusRequest) -> Vec<Vec<String>> {
+        if let Ok(status_info) = self.call(req).await {
+            match status_info.status {
+                FinalExecutionStatus::SuccessValue(_) => {
+                    let mut data = vec![status_info.transaction_outcome.outcome.logs];
+                    let mut receipts_outcome = status_info
+                        .receipts_outcome
+                        .iter()
+                        .map(|v| v.outcome.logs.clone())
+                        .collect();
+
+                    data.append(&mut receipts_outcome);
+                    data
+                }
+                _ => vec![],
+            }
+        } else {
+            println!("Failed get output");
+            vec![]
+        }
     }
 
     /// Parse action arguments and return accounts and proof keys
@@ -317,6 +312,13 @@ impl RPC {
                 for proof in res.proofs {
                     proofs.insert(proof);
                 }
+                let status_req = methods::tx::RpcTransactionStatusRequest {
+                    transaction_info: methods::tx::TransactionInfo::TransactionId {
+                        hash: tx.hash,
+                        account_id: tx.signer_id.clone(),
+                    },
+                };
+                println!("-> {:?}", self.get_output(status_req).await);
             }
 
             // Fetch chunk transactions for receipts
