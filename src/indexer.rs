@@ -43,14 +43,15 @@ pub struct Indexer {
 }
 
 impl Indexer {
-    pub fn new(data_file: PathBuf, get_history: bool) -> Self {
+    pub fn new(data_file: PathBuf, fetch_history: bool) -> Self {
+        // If file doesn't exist just return defult data
         let data = std::fs::read(&data_file).unwrap_or_default();
         let data: IndexerData = IndexerData::try_from_slice(&data[..]).unwrap_or_default();
         Self {
             data,
             data_file,
             last_saved_time: Instant::now(),
-            fetch_history: get_history,
+            fetch_history,
         }
     }
 
@@ -73,9 +74,11 @@ impl Indexer {
         let data = Arc::new(Mutex::new(self.data.clone()));
         loop {
             let current_block = rpc.get_block(BlockKind::Latest).await?;
+            // Skip, if block already exists
             if self.data.last_block == current_block.0 {
                 continue;
             }
+            // Check, do we need fetch history data
             let block = if self.fetch_history {
                 if current_block.0 - self.data.last_block > 0 {
                     rpc.get_block(BlockKind::Height(self.data.last_block + 1))

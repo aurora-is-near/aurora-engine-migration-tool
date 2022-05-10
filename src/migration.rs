@@ -3,6 +3,7 @@ use aurora_engine_migration_tool::StateData;
 use borsh::{BorshDeserialize, BorshSerialize};
 use near_sdk::{AccountId, Balance, StorageUsage};
 use std::collections::HashMap;
+use std::io::Write;
 use std::path::PathBuf;
 
 const MIGRATION_METHOD: &str = "migrate";
@@ -78,6 +79,7 @@ impl Migration {
             )
             .await?;
         print!("\r{msg}: {counter}");
+        std::io::stdout().flush()?;
         Ok(())
     }
 
@@ -107,7 +109,10 @@ impl Migration {
             MigrationCheckResult::AccountAmount(missed) => {
                 println!("{msg}: {counter} [Missed: {:?}]", missed.len())
             }
-            MigrationCheckResult::Success => print!("\r{msg}: {counter} [{:?}]", correctness),
+            MigrationCheckResult::Success => {
+                print!("\r{msg}: {counter} [{:?}]", correctness);
+                std::io::stdout().flush()?;
+            }
             _ => {
                 if let MigrationCheckResult::TotalSupply(_) = correctness {
                     println!("{msg} [Missed field: {:?}]", correctness)
@@ -227,7 +232,7 @@ impl Migration {
         }
 
         println!();
-        self.check_migration("Contract data:", contract_migration_data, 0)
+        self.check_migration("Contract data:", contract_migration_data, 1)
             .await?;
 
         Ok(())

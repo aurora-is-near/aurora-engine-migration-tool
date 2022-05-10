@@ -23,10 +23,19 @@ const REQUEST_TIMEOUT: Duration = Duration::from_millis(50);
 /// Gas for commit tx to blockchain (300 TGas)
 const GAS_FOR_COMMIT_TX: u64 = 300_000_000_000_000;
 
+/// Transactions receiver
 const AURORA_CONTRACT: &str = "aurora";
 
 /// How many retries per success request
 const RETRIES_COUNT: u8 = 10;
+
+/// Transaction action method, allowed for output parsing
+const ACTION_METODS: &[&str] = &[
+    "ft_transfer",
+    "ft_transfer_call",
+    "withdraw",
+    "finish_deposit",
+];
 
 #[derive(Debug)]
 pub enum CommitTxError {
@@ -133,15 +142,22 @@ impl RPC {
         Ok((block.header.height, block.chunks))
     }
 
-    /// Get action output for chunk transactions (including receipt output)
+    /// Get action output for chunk transaction (including receipt output)
     pub async fn get_actions_output(&mut self, tx: &SignedTransactionView) -> Vec<String> {
         let mut results: Vec<String> = vec![];
         for action in &tx.actions {
-            let method_name = match action {
-                ActionView::FunctionCall { method_name, .. } => method_name,
+            // Check action method and filter it
+            let (method_name, _args) = match action {
+                ActionView::FunctionCall {
+                    method_name, args, ..
+                } => (method_name, args),
                 _ => continue,
             };
+            if !ACTION_METODS.contains(&method_name.as_str()) {
+                continue;
+            }
             println!("\n\n{:?} ", method_name);
+
             let outcome = if let Ok(tx_info) = self
                 .call(methods::tx::RpcTransactionStatusRequest {
                     transaction_info: methods::tx::TransactionInfo::TransactionId {
@@ -151,7 +167,6 @@ impl RPC {
                 })
                 .await
             {
-                println!("Tx: {:#?}\n", tx_info.status);
                 match tx_info.status {
                     FinalExecutionStatus::SuccessValue(_) => {
                         let mut data = vec![tx_info.transaction_outcome];
@@ -179,7 +194,9 @@ impl RPC {
     /// Get transactions outcome from chunks
     pub async fn get_transactions_outcome(&mut self, chunks: Vec<ChunkHeaderView>) -> Vec<String> {
         let mut results = vec![];
+        // Fetch all chunks from block
         for chunk in chunks {
+            // Get chunk data
             let chunk_data = if let Ok(chunk_data) = self
                 .call(methods::chunk::RpcChunkRequest {
                     chunk_reference:
@@ -195,10 +212,13 @@ impl RPC {
                 self.unresolved_chunks.insert(chunk.chunk_hash);
                 continue;
             };
+            // Fetch chunk transactions
             for tx in &chunk_data.transactions {
+                // We should process only specific receiver
                 if tx.receiver_id.as_str() != AURORA_CONTRACT {
                     continue;
                 }
+                // Get actions list from transaction
                 let mut outputs = self.get_actions_output(tx).await;
                 results.append(&mut outputs);
             }
