@@ -82,7 +82,12 @@ impl Migration {
     }
 
     /// Send request to check migration correctness
-    async fn check_migration(&self, migration_data: Vec<u8>, counter: usize) -> anyhow::Result<()> {
+    async fn check_migration(
+        &self,
+        msg: &str,
+        migration_data: Vec<u8>,
+        counter: usize,
+    ) -> anyhow::Result<()> {
         let res = self
             .rpc
             .request_view(
@@ -94,9 +99,21 @@ impl Migration {
         let correctness = MigrationCheckResult::try_from_slice(&res[..]).unwrap();
         match correctness {
             MigrationCheckResult::Proof(missed) => {
-                println!("Proofs: {:?} [Missed: {:?}]", counter, missed.len())
+                println!("{msg}: {counter} [Missed: {:?}]", missed.len())
             }
-            _ => println!("Proofs: {:?} [{:?}]", counter, correctness),
+            MigrationCheckResult::AccountNotExist(missed) => {
+                println!("{msg}: {counter} [Missed: {:?}]", missed.len())
+            }
+            MigrationCheckResult::AccountAmount(missed) => {
+                println!("{msg}: {counter} [Missed: {:?}]", missed.len())
+            }
+            MigrationCheckResult::StorageUsage(missed) => {
+                println!("{msg}: {counter} [Missed field: {:?}]", missed)
+            }
+            MigrationCheckResult::StatisticsCounter(missed) => {
+                println!("{msg}: {counter} [Missed field: {:?}]", missed)
+            }
+            MigrationCheckResult::Success => println!("{msg}: {counter} [{:?}]", correctness),
         }
         Ok(())
     }
@@ -208,13 +225,15 @@ impl Migration {
         proofs_count = 0;
         for migration_data in reprodusable_data_for_proofs {
             proofs_count += migration_data.len();
-            self.check_migration(migration_data, proofs_count).await?;
+            self.check_migration("Proofs", migration_data, proofs_count)
+                .await?;
         }
 
         accounts_count = 0;
         for migration_data in reprodusable_data_for_accounts {
             accounts_count += migration_data.len();
-            self.check_migration(migration_data, accounts_count).await?;
+            self.check_migration("Accounts:", migration_data, accounts_count)
+                .await?;
         }
 
         Ok(())
