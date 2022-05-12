@@ -30,6 +30,8 @@ pub enum CommitTxError {
     AccessKeyFail,
     CommitFail,
     ViewFail,
+    StatusFail,
+    StatusFailMsg(String),
 }
 
 impl std::error::Error for CommitTxError {
@@ -44,6 +46,8 @@ impl std::fmt::Display for CommitTxError {
             Self::AccessKeyFail => write!(f, "ERR_FAILED_GET_ACCESS_KEY"),
             Self::CommitFail => write!(f, "ERR_FAILED_COMMIT_TX"),
             Self::ViewFail => write!(f, "ERR_FAILED_VIEW_TX"),
+            Self::StatusFailMsg(msg) => write!(f, "ERR_TX_STATUS_FAIL: {}", msg),
+            Self::StatusFail => write!(f, "ERR_TX_STATUS_FAIL"),
         }
     }
 }
@@ -248,9 +252,13 @@ impl RPC {
             .await
             .map_err(|_| CommitTxError::CommitFail)?;
 
-        println!("{:#?}", res.receipts_outcome);
-        println!("{:#?}", res.status);
-        Ok(())
+        match res.status {
+            FinalExecutionStatus::SuccessValue(_) => Ok(()),
+            FinalExecutionStatus::Failure(msg) => {
+                Err(CommitTxError::StatusFailMsg(format!("{:?}", msg)))?
+            }
+            _ => Err(CommitTxError::StatusFail)?,
+        }
     }
 
     /// Request view data for contract method

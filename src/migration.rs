@@ -1,13 +1,12 @@
 use crate::rpc::RPC;
 use aurora_engine_migration_tool::StateData;
-use aurora_engine_types::types::NEP141Wei;
 use borsh::{BorshDeserialize, BorshSerialize};
 use near_sdk::{AccountId, Balance, StorageUsage};
-use serde_json::json;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
 const MIGRATION_METHOD: &str = "migrate";
+const RECORDS_COUNT_PER_TX: usize = 1000;
 
 pub struct MigrationConfig {
     pub signer_account_id: String,
@@ -28,6 +27,17 @@ pub struct MigrationInputData {
     pub account_storage_usage: Option<StorageUsage>,
     pub statistics_aurora_accounts_counter: Option<u64>,
     pub used_proofs: Vec<String>,
+}
+
+#[derive(Debug, BorshSerialize, BorshDeserialize, Eq, PartialEq)]
+pub enum MigrationCheckResult {
+    Success,
+    AccountNotExist(AccountId),
+    AccountAmount((AccountId, Balance)),
+    TotalSupply(Balance),
+    StorageUsage(StorageUsage),
+    StatisticsCounter(u64),
+    Proof(String),
 }
 
 impl Migration {
@@ -51,13 +61,54 @@ impl Migration {
     }
 
     pub async fn run(&self) -> anyhow::Result<()> {
-        #[derive(BorshSerialize, BorshDeserialize)]
-        pub struct MData {
-            pub accounts: HashMap<AccountId, Balance>,
-            pub total_supply: Option<Balance>,
-            pub account_storage_usage: Option<StorageUsage>,
-            pub statistics_aurora_accounts_counter: Option<u64>,
-            pub used_proofs: Vec<String>,
+        // Proofs migration
+        let limit = RECORDS_COUNT_PER_TX;
+        let mut i = 0;
+        let mut proofs_count = 0;
+        loop {
+            let proofs = if i + limit >= self.data.proofs.len() {
+                &self.data.proofs[i..]
+            } else {
+                &self.data.proofs[i..i + limit]
+            };
+            proofs_count += proofs.len();
+            let migration_data = MigrationInputData {
+                accounts: HashMap::new(),
+                total_supply: None,
+                account_storage_usage: None,
+                statistics_aurora_accounts_counter: None,
+                used_proofs: proofs.to_vec(),
+            }
+            .try_to_vec()
+            .expect("Failed serialize");
+
+            self.rpc
+                .commit_tx(
+                    self.config.signer_account_id.clone(),
+                    self.config.signer_secret_key.clone(),
+                    self.config.contract.clone(),
+                    MIGRATION_METHOD.to_string(),
+                    migration_data.clone(),
+                )
+                .await?;
+            let res = self
+                .rpc
+                .request_view(
+                    self.config.contract.clone(),
+                    "check_migration_correctness\
+                "
+                    .to_string(),
+                    migration_data,
+                )
+                .await?;
+            let correctness = MigrationCheckResult::try_from_slice(&res[..]);
+
+            println!("Proofs: {:?} [{:?}]", proofs_count, correctness);
+            if i + limit >= self.data.proofs.len() {
+                break;
+            } else {
+                i += limit;
+            }
         }
 
         let migration_data = MigrationInputData {
@@ -89,17 +140,6 @@ impl Migration {
                 migration_data,
             )
             .await?;
-
-        #[derive(Debug, BorshSerialize, BorshDeserialize, Eq, PartialEq)]
-        pub enum MigrationCheckResult {
-            Success,
-            AccountNotExist(AccountId),
-            AccountAmount((AccountId, Balance)),
-            TotalSupply(Balance),
-            StorageUsage(StorageUsage),
-            StatisticsCounter(u64),
-            Proof(String),
-        }
 
         let res = MigrationCheckResult::try_from_slice(&res[..]);
         println!("{:?}", res);
