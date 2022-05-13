@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 const MIGRATION_METHOD: &str = "migrate";
+const MIGRATION_CHECK_METHOD: &str = "check_migration_correctness";
 const RECORDS_COUNT_PER_TX: usize = 1000;
 
 pub struct MigrationConfig {
@@ -95,9 +96,7 @@ impl Migration {
                 .rpc
                 .request_view(
                     self.config.contract.clone(),
-                    "check_migration_correctness\
-                "
-                    .to_string(),
+                    MIGRATION_CHECK_METHOD.to_string(),
                     migration_data,
                 )
                 .await?;
@@ -110,6 +109,52 @@ impl Migration {
                 i += limit;
             }
         }
+        assert_eq!(proofs_count, self.data.proofs.len());
+
+        let mut accounts: HashMap<AccountId, Balance> = HashMap::new();
+        let mut accounts_count = 0;
+        for (i, (account, amount)) in self.data.accounts.iter().enumerate() {
+            let account = AccountId::try_from(account.to_string()).unwrap();
+            accounts.insert(account.clone(), amount.as_u128());
+            if accounts.len() < limit && i < self.data.accounts.len() - 1 {
+                continue;
+            }
+            accounts_count += &accounts.len();
+
+            let migration_data = MigrationInputData {
+                accounts,
+                total_supply: None,
+                account_storage_usage: None,
+                statistics_aurora_accounts_counter: None,
+                used_proofs: vec![],
+            }
+            .try_to_vec()
+            .expect("Failed serialize");
+
+            self.rpc
+                .commit_tx(
+                    self.config.signer_account_id.clone(),
+                    self.config.signer_secret_key.clone(),
+                    self.config.contract.clone(),
+                    MIGRATION_METHOD.to_string(),
+                    migration_data.clone(),
+                )
+                .await?;
+            let res = self
+                .rpc
+                .request_view(
+                    self.config.contract.clone(),
+                    MIGRATION_CHECK_METHOD.to_string(),
+                    migration_data,
+                )
+                .await?;
+            let correctness = MigrationCheckResult::try_from_slice(&res[..]);
+
+            println!("Accounts: {:?} [{:?}]", accounts_count, correctness);
+            // Clear
+            accounts = HashMap::new();
+        }
+        assert_eq!(self.data.accounts.len(), accounts_count);
 
         let migration_data = MigrationInputData {
             accounts: HashMap::new(),
