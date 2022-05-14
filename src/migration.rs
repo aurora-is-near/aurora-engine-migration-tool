@@ -7,7 +7,7 @@ use std::path::PathBuf;
 
 const MIGRATION_METHOD: &str = "migrate";
 const MIGRATION_CHECK_METHOD: &str = "check_migration_correctness";
-const RECORDS_COUNT_PER_TX: usize = 1000;
+const RECORDS_COUNT_PER_TX: usize = 750;
 
 pub struct MigrationConfig {
     pub signer_account_id: String,
@@ -100,7 +100,7 @@ impl Migration {
                     migration_data,
                 )
                 .await?;
-            let correctness = MigrationCheckResult::try_from_slice(&res[..]);
+            let correctness = MigrationCheckResult::try_from_slice(&res[..]).unwrap();
 
             println!("Proofs: {:?} [{:?}]", proofs_count, correctness);
             if i + limit >= self.data.proofs.len() {
@@ -111,6 +111,7 @@ impl Migration {
         }
         assert_eq!(proofs_count, self.data.proofs.len());
 
+        // Accounts migration
         let mut accounts: HashMap<AccountId, Balance> = HashMap::new();
         let mut accounts_count = 0;
         for (i, (account, amount)) in self.data.accounts.iter().enumerate() {
@@ -148,7 +149,7 @@ impl Migration {
                     migration_data,
                 )
                 .await?;
-            let correctness = MigrationCheckResult::try_from_slice(&res[..]);
+            let correctness = MigrationCheckResult::try_from_slice(&res[..]).unwrap();
 
             println!("Accounts: {:?} [{:?}]", accounts_count, correctness);
             // Clear
@@ -156,11 +157,12 @@ impl Migration {
         }
         assert_eq!(self.data.accounts.len(), accounts_count);
 
+        // Migrate Contract data
         let migration_data = MigrationInputData {
             accounts: HashMap::new(),
-            total_supply: Some(3123),
-            account_storage_usage: Some(22),
-            statistics_aurora_accounts_counter: Some(334),
+            total_supply: Some(self.data.contract_data.total_eth_supply_on_near.as_u128()),
+            account_storage_usage: Some(self.data.contract_data.account_storage_usage),
+            statistics_aurora_accounts_counter: Some(self.data.accounts_counter),
             used_proofs: vec![],
         }
         .try_to_vec()
@@ -179,15 +181,13 @@ impl Migration {
             .rpc
             .request_view(
                 self.config.contract.clone(),
-                "check_migration_correctness\
-                "
-                .to_string(),
+                MIGRATION_CHECK_METHOD.to_string(),
                 migration_data,
             )
             .await?;
 
-        let res = MigrationCheckResult::try_from_slice(&res[..]);
-        println!("{:?}", res);
+        let res = MigrationCheckResult::try_from_slice(&res[..]).unwrap();
+        println!("Contract data [{:?}]", res);
 
         Ok(())
     }

@@ -207,6 +207,7 @@ impl RPC {
         method: String,
         args: Vec<u8>,
     ) -> anyhow::Result<()> {
+        // tokio::time::sleep(SLEEP_BETWEEN_TX).await;
         let signer = near_crypto::InMemorySigner::from_secret_key(
             signer_account_id.parse()?,
             signer_secret_key.parse()?,
@@ -250,11 +251,11 @@ impl RPC {
             .client
             .call(request)
             .await
-            .map_err(|_| CommitTxError::CommitFail)?;
+            .map_err(|err| CommitTxError::CommitFail)?;
 
         match res.status {
             FinalExecutionStatus::SuccessValue(_) => Ok(()),
-            FinalExecutionStatus::Failure(msg) => {
+            FinalExecutionStatus::Failure(_) => {
                 Err(CommitTxError::StatusFailMsg(format!("{:?}", msg)))?
             }
             _ => Err(CommitTxError::StatusFail)?,
