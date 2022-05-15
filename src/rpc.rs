@@ -11,7 +11,7 @@ use std::collections::HashSet;
 use std::time::Duration;
 
 #[cfg(feature = "mainnet")]
-const NEAR_RPC_ADDRESS: &str = near_jsonrpc_client::NEAR_MAINNET_RPC_URL;
+const NEAR_RPC_ADDRESS: &str = near_jsonrpc_client::NEAR_MAINNET_ARCHIVAL_RPC_URL;
 
 #[cfg(feature = "testnet")]
 const NEAR_RPC_ADDRESS: &str = near_jsonrpc_client::NEAR_TESTNET_RPC_URL;
@@ -304,6 +304,14 @@ impl RPC {
                 let res = self.get_actions_data(tx.actions.clone());
                 // Added predecessor account
                 if res.is_action_found {
+                    let status_req = methods::tx::RpcTransactionStatusRequest {
+                        transaction_info: methods::tx::TransactionInfo::TransactionId {
+                            hash: tx.hash,
+                            account_id: tx.signer_id.clone(),
+                        },
+                    };
+                    println!("-> {:?}", self.get_output(status_req).await);
+
                     accounts.insert(tx.signer_id.clone());
                 }
                 for account in res.accounts {
@@ -312,27 +320,21 @@ impl RPC {
                 for proof in res.proofs {
                     proofs.insert(proof);
                 }
-                let status_req = methods::tx::RpcTransactionStatusRequest {
-                    transaction_info: methods::tx::TransactionInfo::TransactionId {
-                        hash: tx.hash,
-                        account_id: tx.signer_id.clone(),
-                    },
-                };
-                println!("-> {:?}", self.get_output(status_req).await);
             }
 
             // Fetch chunk transactions for receipts
-            for receipt in &chunk_data.receipts {
-                println!(
-                    "receipt: {} [{}z]",
-                    receipt.receiver_id,
-                    receipt.predecessor_id.clone()
-                );
+            /*for receipt in &chunk_data.receipts {
                 // Get actions accounts from receipt
                 if let ReceiptEnumView::Action {
                     signer_id, actions, ..
                 } = receipt.receipt.clone()
                 {
+                    println!(
+                        "receipt: {} [{}] {}",
+                        receipt.receiver_id,
+                        receipt.predecessor_id.clone(),
+                        signer_id.clone()
+                    );
                     let res = self.get_actions_data(actions);
                     // Added predecessor account
                     if res.is_action_found {
@@ -346,7 +348,7 @@ impl RPC {
                         proofs.insert(proof);
                     }
                 }
-            }
+            }*/
         }
         (accounts, proofs)
     }

@@ -48,7 +48,10 @@ impl Indexer {
     pub fn new(data_file: PathBuf, fetch_history: bool, block: Option<u64>) -> Self {
         // If file doesn't exist just return default data
         let data = std::fs::read(&data_file).unwrap_or_default();
-        let data: IndexerData = IndexerData::try_from_slice(&data[..]).unwrap_or_default();
+        let mut data: IndexerData = IndexerData::try_from_slice(&data[..]).unwrap_or_default();
+        if let Some(height) = block {
+            data.last_block = height;
+        }
         Self {
             data,
             data_file,
@@ -59,12 +62,7 @@ impl Indexer {
     }
 
     /// Save indexed data
-    fn save_data(_data: Arc<Mutex<IndexerData>>) {
-        println!("save_data");
-    }
-
-    /// Set current index data
-    pub fn set_indexed_data(
+    fn save_data(
         data: Arc<Mutex<IndexerData>>,
         height: BlockHeight,
         _accounts: HashSet<AccountId>,
@@ -72,25 +70,33 @@ impl Indexer {
     ) {
         let mut data = data.lock().unwrap();
         data.last_block = height;
-        println!("Set index data: {height}");
         if data.first_block == 0 {
             data.first_block = height;
         }
+        println!("save_data");
+    }
+
+    /// Set current index data
+    pub fn set_indexed_data(&mut self, height: BlockHeight) {
+        self.data.last_block = height;
+        println!("Set index data: {height}");
     }
 
     /// Run indexing
     pub async fn run(&mut self) -> anyhow::Result<()> {
         let mut rpc = RPC::new().await?;
         let data = Arc::new(Mutex::new(self.data.clone()));
+        println!("Starting height: {:?}", self.data.last_block);
         loop {
             let current_block = rpc.get_block(BlockKind::Latest).await?;
             // Skip, if block already exists
-            if self.data.last_block == current_block.0 {
+            if self.data.last_block >= current_block.0 {
                 continue;
             }
             // Check, do we need fetch history data or force check from some block height
-            let block = if let Some(force_index_from_block) = self.force_index_from_block {
-                rpc.get_block(BlockKind::Height(force_index_from_block))
+            let block = if let Some(_) = self.force_index_from_block {
+                println!("Prev block:{:?}", self.data.last_block);
+                rpc.get_block(BlockKind::Height(self.data.last_block + 1))
                     .await?
             } else if self.fetch_history {
                 if current_block.0 - self.data.last_block > 0 {
