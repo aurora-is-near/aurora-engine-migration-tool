@@ -79,7 +79,6 @@ impl Indexer {
     /// Set current index data
     pub fn set_indexed_data(&mut self, height: BlockHeight) {
         self.data.last_block = height;
-        println!("Set index data: {height}");
     }
 
     /// Run indexing
@@ -94,8 +93,7 @@ impl Indexer {
                 continue;
             }
             // Check, do we need fetch history data or force check from some block height
-            let block = if let Some(_) = self.force_index_from_block {
-                println!("Prev block:{:?}", self.data.last_block);
+            let block = if self.force_index_from_block.is_some() {
                 rpc.get_block(BlockKind::Height(self.data.last_block + 1))
                     .await?
             } else if self.fetch_history {
@@ -113,17 +111,14 @@ impl Indexer {
 
             let out = rpc.get_transactions_outcome(block.1).await;
 
-            {
-                let data = data.clone();
-                Self::set_indexed_data(data, block.0, out.0, out.1);
-            }
+            self.set_indexed_data(block.0);
 
             // Save data
             if self.last_saved_time.elapsed() > SAVE_FILE_TIMEOUT {
                 self.last_saved_time = Instant::now();
                 let data = data.clone();
-                tokio::spawn(async {
-                    Self::save_data(data);
+                tokio::spawn(async move {
+                    Self::save_data(data, block.0, out.0, out.1);
                 });
             }
         }

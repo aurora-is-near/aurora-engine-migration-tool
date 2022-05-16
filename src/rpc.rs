@@ -6,7 +6,8 @@ use near_jsonrpc_primitives::types::query::QueryResponseKind;
 use near_primitives::hash::CryptoHash;
 use near_primitives::transaction::{Action, FunctionCallAction, Transaction};
 use near_primitives::types::{AccountId, Balance, BlockHeight, BlockReference};
-use near_primitives::views::{ActionView, ChunkHeaderView, FinalExecutionStatus, ReceiptEnumView};
+use near_primitives::views::{ActionView, ChunkHeaderView, FinalExecutionStatus};
+use near_sdk::json_types::U128;
 use std::collections::HashSet;
 use std::time::Duration;
 
@@ -227,15 +228,19 @@ impl RPC {
                 #[derive(Debug, Deserialize)]
                 pub struct FtTransferCallArgs {
                     pub receiver_id: AccountId,
-                    pub amount: Balance,
+                    pub amount: U128,
                     pub memo: Option<String>,
                     pub msg: String,
                 }
+                let _ = serde_json::from_slice::<FtTransferCallArgs>(&args[..]).unwrap();
                 if let Ok(res) = serde_json::from_slice::<FtTransferCallArgs>(&args[..]) {
                     println!("FtTransferCall: {}", res.receiver_id);
                     (vec![res.receiver_id], None)
                 } else {
-                    println!("Failed deserialize FtTransferCallArgs");
+                    println!(
+                        "Failed deserialize FtTransferCallArgs: {:?}",
+                        String::from_utf8(args)
+                    );
                     (vec![], None)
                 }
             }
