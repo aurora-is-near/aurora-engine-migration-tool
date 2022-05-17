@@ -4,6 +4,7 @@ use near_jsonrpc_client::{methods, JsonRpcClient};
 use near_primitives::hash::CryptoHash;
 use near_primitives::types::BlockHeight;
 use near_primitives::views::ActionView;
+use near_sdk::AccountId;
 use std::collections::HashSet;
 use std::io::Write;
 use std::path::PathBuf;
@@ -44,7 +45,7 @@ pub struct Indexer {
 
 impl Indexer {
     pub fn new(data_file: PathBuf, fetch_history: bool) -> Self {
-        // If file doesn't exist just return defult data
+        // If file doesn't exist just return default data
         let data = std::fs::read(&data_file).unwrap_or_default();
         let data: IndexerData = IndexerData::try_from_slice(&data[..]).unwrap_or_default();
         Self {
@@ -60,7 +61,7 @@ impl Indexer {
     pub fn set_indexed_data(
         data: Arc<Mutex<IndexerData>>,
         height: BlockHeight,
-        _output: Vec<String>,
+        _output: Vec<AccountId>,
     ) {
         let mut data = data.lock().unwrap();
         data.last_block = height;

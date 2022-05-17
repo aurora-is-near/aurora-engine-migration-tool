@@ -5,9 +5,8 @@ use near_jsonrpc_primitives::types::query::QueryResponseKind;
 use near_primitives::hash::CryptoHash;
 use near_primitives::transaction::{Action, FunctionCallAction, Transaction};
 use near_primitives::types::{BlockHeight, BlockReference};
-use near_primitives::views::{
-    ActionView, ChunkHeaderView, FinalExecutionStatus, SignedTransactionView,
-};
+use near_primitives::views::{ActionView, ChunkHeaderView, FinalExecutionStatus};
+use near_sdk::AccountId;
 use std::collections::HashSet;
 use std::time::Duration;
 
@@ -30,7 +29,7 @@ const AURORA_CONTRACT: &str = "aurora";
 const RETRIES_COUNT: u8 = 10;
 
 /// Transaction action method, allowed for output parsing
-const ACTION_METODS: &[&str] = &[
+const ACTION_METHODS: &[&str] = &[
     "ft_transfer",
     "ft_transfer_call",
     "withdraw",
@@ -143,9 +142,9 @@ impl RPC {
     }
 
     /// Get action output for chunk transaction (including receipt output)
-    pub async fn get_actions_output(&mut self, tx: &SignedTransactionView) -> Vec<String> {
-        let mut results: Vec<String> = vec![];
-        for action in &tx.actions {
+    pub async fn get_actions_output(&mut self, actions: Vec<ActionView>) -> Vec<AccountId> {
+        let results: Vec<AccountId> = vec![];
+        for action in actions {
             // Check action method and filter it
             let (method_name, _args) = match action {
                 ActionView::FunctionCall {
@@ -153,46 +152,45 @@ impl RPC {
                 } => (method_name, args),
                 _ => continue,
             };
-            if !ACTION_METODS.contains(&method_name.as_str()) {
+            if !ACTION_METHODS.contains(&method_name.as_str()) {
                 continue;
             }
             println!("\n\n{:?} ", method_name);
-
-            let outcome = if let Ok(tx_info) = self
-                .call(methods::tx::RpcTransactionStatusRequest {
-                    transaction_info: methods::tx::TransactionInfo::TransactionId {
-                        hash: tx.hash,
-                        account_id: tx.signer_id.clone(),
-                    },
-                })
-                .await
-            {
-                match tx_info.status {
-                    FinalExecutionStatus::SuccessValue(_) => {
-                        let mut data = vec![tx_info.transaction_outcome];
-                        let mut receipts_outcome = tx_info.receipts_outcome;
-                        data.append(&mut receipts_outcome);
-                        data
-                    }
-                    _ => continue,
-                }
-            } else {
-                println!("Failed get tx: {:?}", tx.hash);
-                self.unresolved_txs.insert(tx.hash);
-                continue;
-            };
-            let mut outputs: Vec<String> = outcome.iter().fold(vec![], |mut res, o| {
-                let mut log = o.outcome.logs.clone();
-                res.append(&mut log);
-                res
-            });
-            results.append(&mut outputs);
         }
+
+        // TODO: decide do we need Tx outcome
+        // let outcome = if let Ok(tx_info) = self
+        //     .call(methods::tx::RpcTransactionStatusRequest {
+        //         transaction_info: methods::tx::TransactionInfo::TransactionId {
+        //             hash: tx.hash,
+        //             account_id: tx.signer_id.clone(),
+        //         },
+        //     })
+        //     .await
+        // {
+        //     match tx_info.status {
+        //         FinalExecutionStatus::SuccessValue(_) => {
+        //             let mut data = vec![tx_info.transaction_outcome];
+        //             let mut receipts_outcome = tx_info.receipts_outcome;
+        //             data.append(&mut receipts_outcome);
+        //             data
+        //         }
+        //         _ => continue,
+        //     }
+        // } else {
+        //     println!("Failed get tx: {:?}", tx.hash);
+        //     self.unresolved_txs.insert(tx.hash);
+        //     continue;
+        // };
+
         results
     }
 
     /// Get transactions outcome from chunks
-    pub async fn get_transactions_outcome(&mut self, chunks: Vec<ChunkHeaderView>) -> Vec<String> {
+    pub async fn get_transactions_outcome(
+        &mut self,
+        chunks: Vec<ChunkHeaderView>,
+    ) -> Vec<AccountId> {
         let mut results = vec![];
         // Fetch all chunks from block
         for chunk in chunks {
@@ -219,7 +217,7 @@ impl RPC {
                     continue;
                 }
                 // Get actions list from transaction
-                let mut outputs = self.get_actions_output(tx).await;
+                let mut outputs = self.get_actions_output(tx.actions.clone()).await;
                 results.append(&mut outputs);
             }
         }
@@ -238,7 +236,7 @@ impl RPC {
         method: String,
         args: Vec<u8>,
     ) -> anyhow::Result<()> {
-        // Get signer key for commiting tx
+        // Get signer key for Tx commit
         let signer = near_crypto::InMemorySigner::from_secret_key(
             signer_account_id.parse()?,
             signer_secret_key.parse()?,
@@ -303,7 +301,7 @@ impl RPC {
 
             // If request failed for some reason - retry request
             retry += 1;
-            println!("\nRequst retry: {:?}", retry);
+            println!("\nRequest retry: {:?}", retry);
             // If all retries failed it's incident, just panic
             if retry > RETRIES_COUNT {
                 panic!("Failed commit tx {:?} times: {:?}", RETRIES_COUNT, res);
@@ -330,7 +328,7 @@ impl RPC {
         };
 
         let response = self.client.call(request).await?;
-        // Response should containt onlt CallResult, if something other - return error
+        // Response should contain only CallResult, if something other - return error
         if let QueryResponseKind::CallResult(result) = response.kind {
             return Ok(result.result);
         }
