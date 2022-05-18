@@ -107,13 +107,18 @@ impl Migration {
             MigrationCheckResult::AccountAmount(missed) => {
                 println!("{msg}: {counter} [Missed: {:?}]", missed.len())
             }
-            MigrationCheckResult::StorageUsage(missed) => {
-                println!("{msg}: {counter} [Missed field: {:?}]", missed)
-            }
-            MigrationCheckResult::StatisticsCounter(missed) => {
-                println!("{msg}: {counter} [Missed field: {:?}]", missed)
-            }
             MigrationCheckResult::Success => println!("{msg}: {counter} [{:?}]", correctness),
+            _ => {
+                if let MigrationCheckResult::TotalSupply(_) = correctness {
+                    println!("{msg}: {counter} [Missed field: {:?}]", correctness)
+                }
+                if let MigrationCheckResult::StorageUsage(_) = correctness {
+                    println!("{msg}: {counter} [Missed field: {:?}]", correctness)
+                }
+                if let MigrationCheckResult::StatisticsCounter(_) = correctness {
+                    println!("{msg}: {counter} [Missed field: {:?}]", correctness)
+                }
+            }
         }
         Ok(())
     }
@@ -188,7 +193,7 @@ impl Migration {
         assert_eq!(self.data.accounts.len(), accounts_count);
 
         // Migrate Contract data
-        let migration_data = MigrationInputData {
+        let contract_migration_data = MigrationInputData {
             accounts: HashMap::new(),
             total_supply: Some(self.data.contract_data.total_eth_supply_on_near.as_u128()),
             account_storage_usage: Some(self.data.contract_data.account_storage_usage),
@@ -198,26 +203,8 @@ impl Migration {
         .try_to_vec()
         .expect("Failed serialize");
 
-        self.rpc
-            .commit_tx(
-                self.config.signer_account_id.clone(),
-                self.config.signer_secret_key.clone(),
-                self.config.contract.clone(),
-                MIGRATION_METHOD.to_string(),
-                migration_data.clone(),
-            )
+        self.commit_migration(contract_migration_data.clone(), "Contract data", 0)
             .await?;
-        let res = self
-            .rpc
-            .request_view(
-                self.config.contract.clone(),
-                MIGRATION_CHECK_METHOD.to_string(),
-                migration_data,
-            )
-            .await?;
-
-        let res = MigrationCheckResult::try_from_slice(&res[..]).unwrap();
-        println!("Contract data [{:?}]", res);
 
         //=====================================
         // Checking the correctness and integrity of data, regardless of
@@ -235,6 +222,9 @@ impl Migration {
             self.check_migration("Accounts:", migration_data, accounts_count)
                 .await?;
         }
+
+        self.check_migration("Contract data:", contract_migration_data, 0)
+            .await?;
 
         Ok(())
     }
