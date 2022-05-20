@@ -25,13 +25,17 @@ const GAS_FOR_COMMIT_TX: u64 = 300_000_000_000_000;
 
 const AURORA_CONTRACT: &str = "aurora";
 
+/// How many retries per success request
+const RETRIES_COUNT: u8 = 10;
+
 #[derive(Debug)]
 pub enum CommitTxError {
     AccessKeyFail,
-    CommitFail,
+    CommitFail(String),
     ViewFail,
-    StatusFail,
-    StatusFailMsg(String),
+    StatusFail(String),
+    // NotStarted,
+    // Started,
 }
 
 impl std::error::Error for CommitTxError {
@@ -44,10 +48,9 @@ impl std::fmt::Display for CommitTxError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Self::AccessKeyFail => write!(f, "ERR_FAILED_GET_ACCESS_KEY"),
-            Self::CommitFail => write!(f, "ERR_FAILED_COMMIT_TX"),
+            Self::CommitFail(msg) => write!(f, "ERR_FAILED_COMMIT_TX: {}", msg),
             Self::ViewFail => write!(f, "ERR_FAILED_VIEW_TX"),
-            Self::StatusFailMsg(msg) => write!(f, "ERR_TX_STATUS_FAIL: {}", msg),
-            Self::StatusFail => write!(f, "ERR_TX_STATUS_FAIL"),
+            Self::StatusFail(msg) => write!(f, "ERR_TX_STATUS_FAIL: {}", msg),
         }
     }
 }
@@ -67,10 +70,12 @@ pub enum BlockKind {
 }
 
 impl RPC {
-    /// Init rpc-client with final (latest) flock height
+    /// Init RPC with final (latest) flock height
     pub async fn new() -> anyhow::Result<Self> {
+        // Init ner-rpc client
         let client = JsonRpcClient::connect(NEAR_RPC_ADDRESS);
 
+        // Get final (latest) block
         let block_reference = near_primitives::types::BlockReference::Finality(
             near_primitives::types::Finality::Final,
         );
@@ -90,7 +95,9 @@ impl RPC {
         })
     }
 
-    /// Wrap rpc-client calls
+    /// Wrap rpc-client calls.
+    /// All calls should have timeout, it's related to
+    /// restrictions of request count per minute: 600 per/min
     pub async fn call<M>(&self, method: M) -> MethodCallResult<M::Response, M::Error>
     where
         M: methods::RpcMethod,
@@ -99,6 +106,7 @@ impl RPC {
         self.client.call(method).await
     }
 
+    /// Get block data with Block kind request
     pub async fn get_block(
         &mut self,
         bloch_kind: BlockKind,
@@ -198,7 +206,10 @@ impl RPC {
         results
     }
 
-    /// Commit transaction and wait respond
+    /// Commit transaction and wait respond. It should retry if it's fail
+    /// for some reason.
+    /// Return error if request call failed, or status type not Success
+    /// after retries.
     pub async fn commit_tx(
         &self,
         signer_account_id: String,
@@ -207,7 +218,7 @@ impl RPC {
         method: String,
         args: Vec<u8>,
     ) -> anyhow::Result<()> {
-        // tokio::time::sleep(SLEEP_BETWEEN_TX).await;
+        // Get signer key for commiting tx
         let signer = near_crypto::InMemorySigner::from_secret_key(
             signer_account_id.parse()?,
             signer_secret_key.parse()?,
@@ -224,11 +235,13 @@ impl RPC {
             })
             .await?;
 
+        // Get access key nonce
         let current_nonce = match access_key_query_response.kind {
             QueryResponseKind::AccessKey(access_key) => access_key.nonce,
             _ => Err(CommitTxError::AccessKeyFail)?,
         };
 
+        // Prepare transaction to commit
         let transaction = Transaction {
             signer_id: signer.account_id.clone(),
             public_key: signer.public_key.clone(),
@@ -247,28 +260,46 @@ impl RPC {
             signed_transaction: transaction.sign(&signer),
         };
 
-        let res = self
-            .client
-            .call(request)
-            .await
-            .map_err(|err| CommitTxError::CommitFail)?;
-
-        match res.status {
-            FinalExecutionStatus::SuccessValue(_) => Ok(()),
-            FinalExecutionStatus::Failure(_) => {
-                Err(CommitTxError::StatusFailMsg(format!("{:?}", msg)))?
+        let mut retry = 0;
+        // Trying commit tx with retry if failed
+        loop {
+            // Commit tx
+            let mut res = self
+                .client
+                .call(&request)
+                .await
+                .map_err(|err| CommitTxError::CommitFail(format!("{:?}", err)));
+            // Check response and set errors if it needs
+            if let Ok(tx_res) = res {
+                // If success - check response status
+                match tx_res.status {
+                    FinalExecutionStatus::SuccessValue(_) => return Ok(()),
+                    FinalExecutionStatus::Failure(err) => {
+                        res = Err(CommitTxError::StatusFail(format!("{:?}", err)))
+                    }
+                    _ => res = Err(CommitTxError::StatusFail("Other".to_string())),
+                }
             }
-            _ => Err(CommitTxError::StatusFail)?,
+
+            // If request failed for some reason - retry request
+            retry += 1;
+            println!("Requst retry: {:?}", retry);
+            // If all retries failed it's incident, just panic
+            if retry > RETRIES_COUNT {
+                panic!("Failed commit tx {:?} times: {:?}", RETRIES_COUNT, res);
+            }
         }
     }
 
-    /// Request view data for contract method
+    /// Request view data for contract method.
+    /// Return error if wrong response type or failed request
     pub async fn request_view(
         &self,
         contract: String,
         method: String,
         args: Vec<u8>,
     ) -> anyhow::Result<Vec<u8>> {
+        // Request fro final (latest) block
         let request = methods::query::RpcQueryRequest {
             block_reference: BlockReference::Finality(near_primitives::types::Finality::Final),
             request: near_primitives::views::QueryRequest::CallFunction {
@@ -279,6 +310,7 @@ impl RPC {
         };
 
         let response = self.client.call(request).await?;
+        // Response should containt onlt CallResult, if something other - return error
         if let QueryResponseKind::CallResult(result) = response.kind {
             return Ok(result.result);
         }
