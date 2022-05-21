@@ -139,15 +139,10 @@ impl Migration {
         }
         assert_eq!(proofs_count, self.data.proofs.len());
 
-        proofs_count = 0;
-        for migration_data in reprodusable_data_for_proofs {
-            proofs_count += migration_data.len();
-            self.check_migration(migration_data, proofs_count).await?;
-        }
-
         // Accounts migration
         let mut accounts: HashMap<AccountId, Balance> = HashMap::new();
         let mut accounts_count = 0;
+        let mut reprodusable_data_for_accounts: Vec<Vec<u8>> = vec![];
         for (i, (account, amount)) in self.data.accounts.iter().enumerate() {
             let account = AccountId::try_from(account.to_string()).unwrap();
             accounts.insert(account.clone(), amount.as_u128());
@@ -165,27 +160,11 @@ impl Migration {
             }
             .try_to_vec()
             .expect("Failed serialize");
+            reprodusable_data_for_accounts.push(migration_data.clone());
 
-            self.rpc
-                .commit_tx(
-                    self.config.signer_account_id.clone(),
-                    self.config.signer_secret_key.clone(),
-                    self.config.contract.clone(),
-                    MIGRATION_METHOD.to_string(),
-                    migration_data.clone(),
-                )
+            self.commit_migration(migration_data, "Accounts", accounts_count)
                 .await?;
-            let res = self
-                .rpc
-                .request_view(
-                    self.config.contract.clone(),
-                    MIGRATION_CHECK_METHOD.to_string(),
-                    migration_data,
-                )
-                .await?;
-            let correctness = MigrationCheckResult::try_from_slice(&res[..]).unwrap();
 
-            println!("Accounts: {:?} [{:?}]", accounts_count, correctness);
             // Clear
             accounts = HashMap::new();
         }
@@ -222,6 +201,12 @@ impl Migration {
 
         let res = MigrationCheckResult::try_from_slice(&res[..]).unwrap();
         println!("Contract data [{:?}]", res);
+
+        proofs_count = 0;
+        for migration_data in reprodusable_data_for_proofs {
+            proofs_count += migration_data.len();
+            self.check_migration(migration_data, proofs_count).await?;
+        }
 
         Ok(())
     }
