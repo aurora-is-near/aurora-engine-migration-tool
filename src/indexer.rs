@@ -50,7 +50,7 @@ impl Indexer {
         let data = std::fs::read(&data_file).unwrap_or_default();
         let mut data: IndexerData = IndexerData::try_from_slice(&data[..]).unwrap_or_default();
         if let Some(height) = block {
-            data.last_block = height;
+            data.last_block = height - 1;
         }
         Self {
             data,

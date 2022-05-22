@@ -12,5 +12,6 @@ migrate: build-release
 	
 index: 
 	@cargo build --release --no-default-features --features mainnet
-	@target/release/aurora-engine-migration-tool  indexer --block 79370014
+	@target/release/aurora-engine-migration-tool  indexer --block 79373253
+
 	

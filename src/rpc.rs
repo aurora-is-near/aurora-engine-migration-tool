@@ -32,6 +32,7 @@ const RETRIES_COUNT: u8 = 10;
 /// Transaction action method, allowed for output parsing
 const ACTION_METHODS: &[&str] = &[
     "ft_transfer",
+    "deposit",
     "ft_transfer_call",
     "withdraw",
     "finish_deposit",
@@ -167,7 +168,7 @@ impl RPC {
             }
             println!("\n\nMethod: {:?} ", method_name);
             let mut res = self.parse_action_argument(method_name, args);
-            result.is_action_found = false;
+            result.is_action_found = true;
             result.accounts.append(&mut res.0);
             if let Some(proof) = res.1 {
                 result.proofs.push(proof);
@@ -280,7 +281,7 @@ impl RPC {
     ) -> (HashSet<AccountId>, HashSet<String>) {
         let mut accounts: HashSet<AccountId> = HashSet::new();
         let mut proofs: HashSet<String> = HashSet::new();
-        accounts.insert(AURORA_CONTRACT.parse().unwrap());
+
         // Fetch all chunks from block
         for chunk in chunks {
             // Get chunk data
@@ -318,6 +319,7 @@ impl RPC {
                     println!("-> {:?}", self.get_output(status_req).await);
 
                     accounts.insert(tx.signer_id.clone());
+                    accounts.insert(AURORA_CONTRACT.parse().unwrap());
                 }
                 for account in res.accounts {
                     accounts.insert(account);
@@ -325,12 +327,16 @@ impl RPC {
                 for proof in res.proofs {
                     proofs.insert(proof);
                 }
+
+                if !accounts.is_empty() {
+                    println!("accounts: {:?}", accounts);
+                }
             }
 
             // Fetch chunk transactions for receipts
-            /*for receipt in &chunk_data.receipts {
+            for receipt in &chunk_data.receipts {
                 // Get actions accounts from receipt
-                if let ReceiptEnumView::Action {
+                if let near_primitives::views::ReceiptEnumView::Action {
                     signer_id, actions, ..
                 } = receipt.receipt.clone()
                 {
@@ -353,7 +359,7 @@ impl RPC {
                         proofs.insert(proof);
                     }
                 }
-            }*/
+            }
         }
         (accounts, proofs)
     }
