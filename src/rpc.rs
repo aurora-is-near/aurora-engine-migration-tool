@@ -166,7 +166,7 @@ impl RPC {
             if !ACTION_METHODS.contains(&method_name.as_str()) {
                 continue;
             }
-            println!("\n\nMethod: {:?} ", method_name);
+
             let mut res = self.parse_action_argument(method_name, args);
             result.is_action_found = true;
             result.accounts.append(&mut res.0);
@@ -214,14 +214,14 @@ impl RPC {
                 #[derive(Debug, Deserialize)]
                 pub struct FtTransferArgs {
                     pub receiver_id: AccountId,
-                    pub amount: Balance,
+                    pub amount: U128,
                     pub memo: Option<String>,
                 }
                 if let Ok(res) = serde_json::from_slice::<FtTransferArgs>(&args[..]) {
-                    println!("FtTransfer: {}", res.receiver_id);
                     (vec![res.receiver_id], None)
                 } else {
                     println!("Failed deserialize FtTransferArgs");
+                    serde_json::from_slice::<FtTransferArgs>(&args[..]).unwrap();
                     (vec![], None)
                 }
             }
@@ -235,13 +235,10 @@ impl RPC {
                 }
                 let _ = serde_json::from_slice::<FtTransferCallArgs>(&args[..]).unwrap();
                 if let Ok(res) = serde_json::from_slice::<FtTransferCallArgs>(&args[..]) {
-                    println!("FtTransferCall: {}", res.receiver_id);
                     (vec![res.receiver_id], None)
                 } else {
-                    println!(
-                        "Failed deserialize FtTransferCallArgs: {:?}",
-                        String::from_utf8(args)
-                    );
+                    println!("Failed deserialize FtTransferCallArgs",);
+                    serde_json::from_slice::<FtTransferCallArgs>(&args[..]).unwrap();
                     (vec![], None)
                 }
             }
@@ -267,6 +264,7 @@ impl RPC {
                     (vec![res.new_owner_id, res.relayer_id], Some(res.proof_key))
                 } else {
                     println!("Failed deserialize FinishDepositArgs");
+                    FinishDepositArgs::try_from_slice(&args[..]).unwrap();
                     (vec![], None)
                 }
             }
@@ -329,7 +327,7 @@ impl RPC {
                 }
 
                 if !accounts.is_empty() {
-                    println!("accounts: {:?}", accounts);
+                    println!("Tx accounts: {:?}", accounts);
                 }
             }
 
@@ -340,17 +338,12 @@ impl RPC {
                     signer_id, actions, ..
                 } = receipt.receipt.clone()
                 {
-                    println!(
-                        "receipt: {} [{}] {}",
-                        receipt.receiver_id,
-                        receipt.predecessor_id.clone(),
-                        signer_id.clone()
-                    );
                     let res = self.get_actions_data(actions);
                     // Added predecessor account
                     if res.is_action_found {
                         accounts.insert(signer_id.clone());
                         accounts.insert(receipt.predecessor_id.clone());
+                        accounts.insert(receipt.receiver_id.clone());
                     }
                     for account in res.accounts {
                         accounts.insert(account);
