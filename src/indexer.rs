@@ -2,9 +2,8 @@ use crate::rpc::{BlockKind, RPC};
 use borsh::{BorshDeserialize, BorshSerialize};
 use near_jsonrpc_client::{methods, JsonRpcClient};
 use near_primitives::hash::CryptoHash;
-use near_primitives::types::BlockHeight;
+use near_primitives::types::{AccountId, BlockHeight};
 use near_primitives::views::ActionView;
-use near_sdk::AccountId;
 use std::collections::HashSet;
 use std::io::Write;
 use std::path::PathBuf;
@@ -61,7 +60,7 @@ impl Indexer {
     pub fn set_indexed_data(
         data: Arc<Mutex<IndexerData>>,
         height: BlockHeight,
-        _output: Vec<AccountId>,
+        _output: HashSet<AccountId>,
     ) {
         let mut data = data.lock().unwrap();
         data.last_block = height;

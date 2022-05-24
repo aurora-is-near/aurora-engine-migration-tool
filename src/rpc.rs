@@ -4,9 +4,8 @@ use near_jsonrpc_client::{methods, JsonRpcClient, MethodCallResult};
 use near_jsonrpc_primitives::types::query::QueryResponseKind;
 use near_primitives::hash::CryptoHash;
 use near_primitives::transaction::{Action, FunctionCallAction, Transaction};
-use near_primitives::types::{BlockHeight, BlockReference};
-use near_primitives::views::{ActionView, ChunkHeaderView, FinalExecutionStatus};
-use near_sdk::AccountId;
+use near_primitives::types::{AccountId, BlockHeight, BlockReference};
+use near_primitives::views::{ActionView, ChunkHeaderView, FinalExecutionStatus, ReceiptEnumView};
 use std::collections::HashSet;
 use std::time::Duration;
 
@@ -62,7 +61,7 @@ impl std::fmt::Display for CommitTxError {
         }
     }
 }
-pub type TransactionView = (near_primitives::types::AccountId, CryptoHash);
+pub type TransactionView = (AccountId, CryptoHash);
 
 pub struct RPC {
     pub client: JsonRpcClient,
@@ -142,7 +141,7 @@ impl RPC {
     }
 
     /// Get action output for chunk transaction (including receipt output)
-    pub async fn get_actions_output(&mut self, actions: Vec<ActionView>) -> Vec<AccountId> {
+    pub async fn get_actions_accounts(&mut self, actions: Vec<ActionView>) -> Vec<AccountId> {
         let results: Vec<AccountId> = vec![];
         for action in actions {
             // Check action method and filter it
@@ -190,8 +189,9 @@ impl RPC {
     pub async fn get_transactions_outcome(
         &mut self,
         chunks: Vec<ChunkHeaderView>,
-    ) -> Vec<AccountId> {
-        let mut results = vec![];
+    ) -> HashSet<AccountId> {
+        let mut results: HashSet<AccountId> = HashSet::new();
+        results.insert(AURORA_CONTRACT.parse().unwrap());
         // Fetch all chunks from block
         for chunk in chunks {
             // Get chunk data
@@ -216,9 +216,27 @@ impl RPC {
                 if tx.receiver_id.as_str() != AURORA_CONTRACT {
                     continue;
                 }
+                results.insert(tx.signer_id.clone());
                 // Get actions list from transaction
-                let mut outputs = self.get_actions_output(tx.actions.clone()).await;
-                results.append(&mut outputs);
+                let accounts = self.get_actions_accounts(tx.actions.clone()).await;
+                for account in accounts {
+                    results.insert(account);
+                }
+            }
+            // Fetch chunk transactions
+            for receipt in &chunk_data.receipts {
+                results.insert(receipt.predecessor_id.clone());
+                // Get actions accounts from receipt
+                if let ReceiptEnumView::Action {
+                    signer_id, actions, ..
+                } = receipt.receipt.clone()
+                {
+                    results.insert(signer_id);
+                    let accounts = self.get_actions_accounts(actions).await;
+                    for account in accounts {
+                        results.insert(account);
+                    }
+                }
             }
         }
         results
