@@ -206,8 +206,19 @@ impl RPC {
                 }
             }
             "ft_transfer_call" => {
-                // TransferCallCallArgs
-                vec![]
+                #[derive(Debug, Deserialize)]
+                pub struct FtTransferCallArgs {
+                    pub receiver_id: AccountId,
+                    pub amount: Balance,
+                    pub memo: Option<String>,
+                    pub msg: String,
+                }
+                if let Ok(res) = serde_json::from_slice::<FtTransferCallArgs>(&args[..]) {
+                    vec![res.receiver_id]
+                } else {
+                    println!("Failed deserialize FtTransferCallArgs");
+                    vec![]
+                }
             }
             "withdraw" => vec![],
             "finish_deposit" => vec![],
