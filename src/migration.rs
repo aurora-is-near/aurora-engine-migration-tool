@@ -33,12 +33,12 @@ pub struct MigrationInputData {
 #[derive(Debug, BorshSerialize, BorshDeserialize, Eq, PartialEq)]
 pub enum MigrationCheckResult {
     Success,
-    AccountNotExist(AccountId),
-    AccountAmount((AccountId, Balance)),
+    AccountNotExist(Vec<AccountId>),
+    AccountAmount(HashMap<AccountId, Balance>),
     TotalSupply(Balance),
     StorageUsage(StorageUsage),
     StatisticsCounter(u64),
-    Proof(String),
+    Proof(Vec<String>),
 }
 
 impl Migration {
@@ -102,7 +102,11 @@ impl Migration {
                 .await?;
             let correctness = MigrationCheckResult::try_from_slice(&res[..]).unwrap();
 
-            println!("Proofs: {:?} [{:?}]", proofs_count, correctness);
+            if let MigrationCheckResult::Proof(missed) = correctness {
+                println!("Proofs: {:?} [Missed: {:?}]", proofs_count, missed.len());
+            } else {
+                println!("Proofs: {:?} [{:?}]", proofs_count, correctness);
+            }
             if i + limit >= self.data.proofs.len() {
                 break;
             } else {
@@ -110,6 +114,49 @@ impl Migration {
             }
         }
         assert_eq!(proofs_count, self.data.proofs.len());
+
+        // Wait for one block
+        tokio::sync::sleep(std::time::Duration::from_secs(2));
+        let mut i = 0;
+        let mut proofs_count = 0;
+        loop {
+            let proofs = if i + limit >= self.data.proofs.len() {
+                &self.data.proofs[i..]
+            } else {
+                &self.data.proofs[i..i + limit]
+            };
+            proofs_count += proofs.len();
+            let migration_data = MigrationInputData {
+                accounts: HashMap::new(),
+                total_supply: None,
+                account_storage_usage: None,
+                statistics_aurora_accounts_counter: None,
+                used_proofs: proofs.to_vec(),
+            }
+            .try_to_vec()
+            .expect("Failed serialize");
+
+            let res = self
+                .rpc
+                .request_view(
+                    self.config.contract.clone(),
+                    MIGRATION_CHECK_METHOD.to_string(),
+                    migration_data,
+                )
+                .await?;
+            let correctness = MigrationCheckResult::try_from_slice(&res[..]).unwrap();
+
+            if let MigrationCheckResult::Proof(missed) = correctness {
+                println!("Proofs: {:?} [Missed: {:?}]", proofs_count, missed.len());
+            } else {
+                println!("Proofs: {:?} [{:?}]", proofs_count, correctness);
+            }
+            if i + limit >= self.data.proofs.len() {
+                break;
+            } else {
+                i += limit;
+            }
+        }
 
         // Accounts migration
         let mut accounts: HashMap<AccountId, Balance> = HashMap::new();
