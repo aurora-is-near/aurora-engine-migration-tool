@@ -98,7 +98,7 @@ impl RPC {
                 block_reference: block_reference.clone(),
             })
             .await
-            .expect("Failed get latest block");
+            .expect(" Failed get latest block");
 
         Ok(Self {
             client,
@@ -138,7 +138,7 @@ impl RPC {
             .call(methods::block::RpcBlockRequest { block_reference })
             .await
             .map_err(|e| {
-                println!("Failed get block");
+                println!(" Failed get block");
                 if let BlockKind::Height(height) = bloch_kind {
                     self.unresolved_blocks.insert(height);
                 }
@@ -220,7 +220,7 @@ impl RPC {
                 if let Ok(res) = serde_json::from_slice::<FtTransferArgs>(&args[..]) {
                     (vec![res.receiver_id], None)
                 } else {
-                    println!("Failed deserialize FtTransferArgs");
+                    println!(" Failed deserialize FtTransferArgs");
                     serde_json::from_slice::<FtTransferArgs>(&args[..]).unwrap();
                     (vec![], None)
                 }
@@ -237,36 +237,42 @@ impl RPC {
                 if let Ok(res) = serde_json::from_slice::<FtTransferCallArgs>(&args[..]) {
                     (vec![res.receiver_id], None)
                 } else {
-                    println!("Failed deserialize FtTransferCallArgs",);
+                    println!(" Failed deserialize FtTransferCallArgs",);
                     serde_json::from_slice::<FtTransferCallArgs>(&args[..]).unwrap();
                     (vec![], None)
                 }
             }
             "withdraw" => {
-                println!("Withdraw");
+                println!(" Withdraw");
                 (vec![], None)
             }
             "finish_deposit" => {
                 #[derive(BorshDeserialize)]
                 pub struct FinishDepositArgs {
                     pub new_owner_id: AccountId,
-                    pub amount: Balance,
+                    pub amount: u128,
                     pub proof_key: String,
                     pub relayer_id: AccountId,
-                    pub fee: Balance,
+                    pub fee: u128,
                     pub msg: Option<Vec<u8>>,
                 }
                 if let Ok(res) = FinishDepositArgs::try_from_slice(&args[..]) {
                     println!(
-                        "Finish deposit: {}, {}. Proof key: {}",
+                        " Finish deposit: {}, {}. Proof key: {}",
                         res.new_owner_id, res.relayer_id, res.proof_key
                     );
                     (vec![res.new_owner_id, res.relayer_id], Some(res.proof_key))
                 } else {
-                    println!("Failed deserialize FinishDepositArgs");
-                    FinishDepositArgs::try_from_slice(&args[..]).unwrap();
+                    println!(" Failed deserialize FinishDepositArgs: {:?}", args.len());
+                    FinishDepositArgs::try_from_slice(&args[..])
+                        .map_err(|err| println!("{:#?}", err));
+                    panic!("==");
                     (vec![], None)
                 }
+            }
+            "deposit" => {
+                println!(" Deposit");
+                (vec![], None)
             }
             _ => (vec![], None),
         }
@@ -298,6 +304,7 @@ impl RPC {
                 self.unresolved_chunks.insert(chunk.chunk_hash);
                 continue;
             };
+
             // Fetch chunk transactions
             for tx in &chunk_data.transactions {
                 // We should process only specific receiver
@@ -314,7 +321,7 @@ impl RPC {
                             account_id: tx.signer_id.clone(),
                         },
                     };
-                    println!("-> {:?}", self.get_output(status_req).await);
+                    println!(" TX -> {:?}\n", self.get_output(status_req).await);
 
                     accounts.insert(tx.signer_id.clone());
                     accounts.insert(AURORA_CONTRACT.parse().unwrap());
@@ -324,10 +331,6 @@ impl RPC {
                 }
                 for proof in res.proofs {
                     proofs.insert(proof);
-                }
-
-                if !accounts.is_empty() {
-                    println!("Tx accounts: {:?}", accounts);
                 }
             }
 

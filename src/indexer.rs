@@ -111,7 +111,7 @@ impl Indexer {
 
             let out = rpc.get_transactions_outcome(block.1).await;
             if !out.0.is_empty() || !out.1.is_empty() {
-                println!("\nAccounts: {:?}\nProofs: {:?}", out.0, out.1);
+                //println!("\nAccounts: {:?}\nProofs: {:?}", out.0, out.1);
             }
             self.set_indexed_data(block.0);
 

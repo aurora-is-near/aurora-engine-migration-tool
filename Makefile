@@ -1,4 +1,5 @@
-clippy:
+check:
+	@cargo fmt -- --check
 	@cargo clippy -- -D warnings
 
 build-release:
@@ -12,6 +13,4 @@ migrate: build-release
 	
 index: 
 	@cargo build --release --no-default-features --features mainnet
-	@target/release/aurora-engine-migration-tool  indexer --block 79373253
-
-	
+	@target/release/aurora-engine-migration-tool  indexer --block 79373255
