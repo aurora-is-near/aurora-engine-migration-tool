@@ -5,7 +5,7 @@ use near_jsonrpc_client::{methods, JsonRpcClient, MethodCallResult};
 use near_jsonrpc_primitives::types::query::QueryResponseKind;
 use near_primitives::hash::CryptoHash;
 use near_primitives::transaction::{Action, FunctionCallAction, Transaction};
-use near_primitives::types::{AccountId, Balance, BlockHeight, BlockReference};
+use near_primitives::types::{AccountId, BlockHeight, BlockReference};
 use near_primitives::views::{ActionView, ChunkHeaderView, FinalExecutionStatus};
 use near_sdk::json_types::U128;
 use std::collections::HashSet;
@@ -263,10 +263,7 @@ impl RPC {
                     );
                     (vec![res.new_owner_id, res.relayer_id], Some(res.proof_key))
                 } else {
-                    println!(" Failed deserialize FinishDepositArgs: {:?}", args.len());
-                    FinishDepositArgs::try_from_slice(&args[..])
-                        .map_err(|err| println!("{:#?}", err));
-                    panic!("==");
+                    println!(" Failed deserialize FinishDepositArgs");
                     (vec![], None)
                 }
             }
@@ -336,6 +333,11 @@ impl RPC {
 
             // Fetch chunk transactions for receipts
             for receipt in &chunk_data.receipts {
+                // We should process only specific receiver
+                if receipt.receiver_id.as_str() != AURORA_CONTRACT {
+                    continue;
+                }
+
                 // Get actions accounts from receipt
                 if let near_primitives::views::ReceiptEnumView::Action {
                     signer_id, actions, ..
