@@ -44,7 +44,8 @@ async fn main() -> anyhow::Result<()> {
             let snapshot_json_file = cmd
                 .get_one::<PathBuf>("file")
                 .expect("Expected snapshot file");
-            parser::parse(snapshot_json_file);
+            let output = cmd.get_one::<PathBuf>("output");
+            parser::parse(snapshot_json_file, output.cloned());
         }
         Some(("indexer", cmd)) => {
             let _history = cmd.get_one::<bool>("history");

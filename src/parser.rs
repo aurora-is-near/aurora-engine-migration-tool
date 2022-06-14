@@ -47,10 +47,21 @@ pub fn get_contract_key() -> Vec<u8> {
     construct_contract_key(&EthConnectorStorageId::FungibleToken)
 }
 
-pub fn parse(json_file: &PathBuf) {
+pub fn parse(json_file: &PathBuf, output: Option<PathBuf>) {
     let data = std::fs::read_to_string(json_file).expect("Failed read data");
-
     let json_data: BlockData = serde_json::from_str(&data).expect("Failed read json");
+    let result_file_name: PathBuf = if let Some(output) = output {
+        output
+    } else {
+        use std::str::FromStr;
+
+        PathBuf::from_str(&format!(
+            "contract_state{:?}.borsh",
+            json_data.result.block_height
+        ))
+        .expect("Failed parse output result file")
+    };
+
     println!("Block height: {:?}", json_data.result.block_height);
     println!("Data size: {:.3} Gb", data.len() as f64 / 1_000_000_000.);
     println!("Data values: {:#?}", json_data.result.values.len());
@@ -114,7 +125,6 @@ pub fn parse(json_file: &PathBuf) {
     .try_to_vec()
     .expect("Failed serialize data");
 
-    let file_name = format!("contract_state{:?}.borsh", json_data.result.block_height);
-    println!("Result file: {}", file_name);
-    std::fs::write(file_name, data).expect("Failed save result data");
+    println!("Result file: {:?}", result_file_name);
+    std::fs::write(result_file_name, data).expect("Failed save result data");
 }
