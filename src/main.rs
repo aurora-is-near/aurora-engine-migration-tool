@@ -48,8 +48,8 @@ async fn main() -> anyhow::Result<()> {
             parser::parse(snapshot_json_file, output.cloned());
         }
         Some(("indexer", cmd)) => {
-            let _history = cmd.get_one::<bool>("history");
-            indexer::indexer().await?;
+            let history = cmd.get_flag("history");
+            indexer::indexer(history).await?;
         }
         _ => (),
     }

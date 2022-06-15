@@ -1,12 +1,11 @@
+use near_jsonrpc_client::{methods, JsonRpcClient};
 use near_primitives::types::BlockHeight;
 use near_primitives::views::ActionView;
 use std::collections::HashSet;
 use std::io::Write;
 use std::time::Duration;
 
-pub async fn indexer() -> anyhow::Result<()> {
-    use near_jsonrpc_client::{methods, JsonRpcClient};
-
+pub async fn indexer(_history: bool) -> anyhow::Result<()> {
     let block_reference =
         near_primitives::types::BlockReference::Finality(near_primitives::types::Finality::Final);
 
