@@ -1,9 +1,10 @@
+use crate::indexer::Indexer;
 use clap::{arg, command, value_parser, ArgAction, Command};
 use std::path::PathBuf;
 
-mod indexer;
-pub mod migration;
-pub mod parser;
+pub mod indexer;
+mod migration;
+mod parser;
 pub mod rpc;
 
 #[tokio::main]
@@ -48,8 +49,9 @@ async fn main() -> anyhow::Result<()> {
             parser::parse(snapshot_json_file, output.cloned());
         }
         Some(("indexer", cmd)) => {
-            let history = cmd.get_flag("history");
-            indexer::indexer(history).await?;
+            let _history = cmd.get_flag("history");
+            Indexer::nex("tst.borsh".into());
+            // indexer::indexer(history).await?;
         }
         _ => (),
     }
