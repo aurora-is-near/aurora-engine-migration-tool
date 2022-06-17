@@ -3,6 +3,7 @@
 use near_jsonrpc_client::{methods, JsonRpcClient, MethodCallResult};
 use near_primitives::hash::CryptoHash;
 use near_primitives::types::BlockHeight;
+use near_primitives::views::ChunkHeaderView;
 use std::collections::HashSet;
 use std::time::Duration;
 
@@ -24,6 +25,11 @@ pub struct RPC {
     pub latest_block_height: BlockHeight,
     pub unresolved_blocks: HashSet<BlockHeight>,
     pub unresolved_txs: HashSet<BlockHeight>,
+}
+
+enum BlockKind {
+    Latest,
+    Height(BlockHeight),
 }
 
 impl RPC {
@@ -58,21 +64,48 @@ impl RPC {
         self.client.call(method).await
     }
 
-    /// Get chunk for specific block height
-    pub async fn chunk_request(
+    pub async fn get_block(
         &mut self,
-        height: BlockHeight,
-    ) -> anyhow::Result<Vec<TransactionView>> {
-        let requedt = methods::chunk::RpcChunkRequest {
-            chunk_reference: near_jsonrpc_primitives::types::chunks::ChunkReference::BlockShardId {
-                block_id: near_primitives::types::BlockId::Height(height),
-                shard_id: near_primitives::types::ShardId::from(AURORA_CONTRACT_SHARD),
-            },
+        bloch_kind: BlockKind,
+    ) -> (BlockHeight, Vec<ChunkHeaderView>) {
+        let block_reference = if let BlockKind::Height(height) = bloch_kind {
+            near_primitives::types::BlockReference::BlockId(
+                near_primitives::types::BlockId::Height(height),
+            )
+        } else {
+            near_primitives::types::BlockReference::Finality(
+                near_primitives::types::Finality::Final,
+            )
         };
-        let _chunk = self.call(requedt).await.map_err(|err| {
-            self.unresolved_blocks.insert(height);
-            err
-        })?;
+        let block = self
+            .client
+            .call(methods::block::RpcBlockRequest { block_reference })
+            .await
+            .expect("Failed get latest block");
+        (block.header.height, block.chunks)
+    }
+
+    /// Get transactions from chunks
+    pub async fn get_transactions(
+        &mut self,
+        chunks: Vec<ChunkHeaderView>,
+    ) -> anyhow::Result<Vec<TransactionView>> {
+        for chunk in chunks {
+            let chunk_data = if let Ok(chunk_data) = self
+                .client
+                .call(methods::chunk::RpcChunkRequest {
+                    chunk_reference:
+                        near_jsonrpc_primitives::types::chunks::ChunkReference::ChunkHash {
+                            chunk_id: chunk.chunk_hash,
+                        },
+                })
+                .await
+            {
+                chunk_data
+            } else {
+                continue;
+            };
+        }
         Ok(vec![])
     }
 }
