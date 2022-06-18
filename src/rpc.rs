@@ -15,8 +15,8 @@ const NEAR_RPC_ADDRESS: &str = near_jsonrpc_client::NEAR_TESTNET_RPC_URL;
 
 /// NEAR-RPC has limits: 600 req/sec, so we need timeout per requests
 const REQUEST_TIMEOUT: Duration = Duration::from_millis(1000);
-/// Dedicated NEAR shard for Aurora contract
-const AURORA_CONTRACT_SHARD: u8 = 3;
+
+const AURORA_CONTRACT: &str = "aurora";
 
 pub type TransactionView = (near_primitives::types::AccountId, CryptoHash);
 
@@ -27,7 +27,7 @@ pub struct RPC {
     pub unresolved_txs: HashSet<BlockHeight>,
 }
 
-enum BlockKind {
+pub enum BlockKind {
     Latest,
     Height(BlockHeight),
 }
@@ -67,7 +67,7 @@ impl RPC {
     pub async fn get_block(
         &mut self,
         bloch_kind: BlockKind,
-    ) -> (BlockHeight, Vec<ChunkHeaderView>) {
+    ) -> anyhow::Result<(BlockHeight, Vec<ChunkHeaderView>)> {
         let block_reference = if let BlockKind::Height(height) = bloch_kind {
             near_primitives::types::BlockReference::BlockId(
                 near_primitives::types::BlockId::Height(height),
@@ -81,8 +81,11 @@ impl RPC {
             .client
             .call(methods::block::RpcBlockRequest { block_reference })
             .await
-            .expect("Failed get latest block");
-        (block.header.height, block.chunks)
+            .map_err(|e| {
+                println!("Failed get block");
+                e
+            })?;
+        Ok((block.header.height, block.chunks))
     }
 
     /// Get transactions from chunks
@@ -105,6 +108,11 @@ impl RPC {
             } else {
                 continue;
             };
+            for tx in chunk_data.transactions {
+                if tx.receiver_id.as_str() != AURORA_CONTRACT {
+                    continue;
+                }
+            }
         }
         Ok(vec![])
     }
