@@ -3,7 +3,7 @@
 use near_jsonrpc_client::{methods, JsonRpcClient, MethodCallResult};
 use near_primitives::hash::CryptoHash;
 use near_primitives::types::BlockHeight;
-use near_primitives::views::ChunkHeaderView;
+use near_primitives::views::{ActionView, ChunkHeaderView, SignedTransactionView};
 use std::collections::HashSet;
 use std::time::Duration;
 
@@ -14,7 +14,7 @@ const NEAR_RPC_ADDRESS: &str = near_jsonrpc_client::NEAR_MAINNET_RPC_URL;
 const NEAR_RPC_ADDRESS: &str = near_jsonrpc_client::NEAR_TESTNET_RPC_URL;
 
 /// NEAR-RPC has limits: 600 req/sec, so we need timeout per requests
-const REQUEST_TIMEOUT: Duration = Duration::from_millis(1000);
+const REQUEST_TIMEOUT: Duration = Duration::from_millis(50);
 
 const AURORA_CONTRACT: &str = "aurora";
 
@@ -78,7 +78,6 @@ impl RPC {
             )
         };
         let block = self
-            .client
             .call(methods::block::RpcBlockRequest { block_reference })
             .await
             .map_err(|e| {
@@ -88,6 +87,31 @@ impl RPC {
         Ok((block.header.height, block.chunks))
     }
 
+    pub async fn get_actions_output(&self, tx: &SignedTransactionView) -> bool {
+        for action in &tx.actions {
+            let method_name = match action {
+                ActionView::FunctionCall { method_name, .. } => method_name,
+                _ => return false,
+            };
+            println!("\n\n{:?} ", method_name);
+            if let Ok(tx_info) = self
+                .call(methods::tx::RpcTransactionStatusRequest {
+                    transaction_info: methods::tx::TransactionInfo::TransactionId {
+                        hash: tx.hash,
+                        account_id: tx.signer_id.clone(),
+                    },
+                })
+                .await
+            {
+                println!("Tx: {:#?}\n", tx_info.status);
+            } else {
+                println!("Failed get tx");
+                return false;
+            }
+        }
+        true
+    }
+
     /// Get transactions from chunks
     pub async fn get_transactions(
         &mut self,
@@ -95,7 +119,6 @@ impl RPC {
     ) -> anyhow::Result<Vec<TransactionView>> {
         for chunk in chunks {
             let chunk_data = if let Ok(chunk_data) = self
-                .client
                 .call(methods::chunk::RpcChunkRequest {
                     chunk_reference:
                         near_jsonrpc_primitives::types::chunks::ChunkReference::ChunkHash {
@@ -108,10 +131,11 @@ impl RPC {
             } else {
                 continue;
             };
-            for tx in chunk_data.transactions {
+            for tx in &chunk_data.transactions {
                 if tx.receiver_id.as_str() != AURORA_CONTRACT {
                     continue;
                 }
+                let _ = self.get_actions_output(tx).await;
             }
         }
         Ok(vec![])

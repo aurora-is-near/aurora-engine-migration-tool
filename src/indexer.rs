@@ -114,7 +114,7 @@ impl Indexer {
 
                                         println!(
                                             "\n\n{:?} [{:?}]: {:?}",
-                                            height, chunk.shard_id, method_name
+                                            height, chunk.shard_id, method_name,
                                         );
                                         if let Ok(tx_info) = client
                                             .call(methods::tx::RpcTransactionStatusRequest {
