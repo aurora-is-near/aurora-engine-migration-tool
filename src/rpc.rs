@@ -3,7 +3,9 @@
 use near_jsonrpc_client::{methods, JsonRpcClient, MethodCallResult};
 use near_primitives::hash::CryptoHash;
 use near_primitives::types::BlockHeight;
-use near_primitives::views::{ActionView, ChunkHeaderView, SignedTransactionView};
+use near_primitives::views::{
+    ActionView, ChunkHeaderView, FinalExecutionStatus, SignedTransactionView,
+};
 use std::collections::HashSet;
 use std::time::Duration;
 
@@ -82,19 +84,24 @@ impl RPC {
             .await
             .map_err(|e| {
                 println!("Failed get block");
+                if let BlockKind::Height(height) = bloch_kind {
+                    self.unresolved_blocks.insert(height);
+                }
                 e
             })?;
         Ok((block.header.height, block.chunks))
     }
 
-    pub async fn get_actions_output(&self, tx: &SignedTransactionView) -> bool {
+    /// Get action output for chunk transactions (including receipt output)
+    pub async fn get_actions_output(&self, tx: &SignedTransactionView) -> Vec<String> {
+        let mut results: Vec<String> = vec![];
         for action in &tx.actions {
             let method_name = match action {
                 ActionView::FunctionCall { method_name, .. } => method_name,
-                _ => return false,
+                _ => continue,
             };
             println!("\n\n{:?} ", method_name);
-            if let Ok(tx_info) = self
+            let outcome = if let Ok(tx_info) = self
                 .call(methods::tx::RpcTransactionStatusRequest {
                     transaction_info: methods::tx::TransactionInfo::TransactionId {
                         hash: tx.hash,
@@ -104,12 +111,27 @@ impl RPC {
                 .await
             {
                 println!("Tx: {:#?}\n", tx_info.status);
+                match tx_info.status {
+                    FinalExecutionStatus::SuccessValue(_) => {
+                        let mut data = vec![tx_info.transaction_outcome];
+                        let mut receipts_outcome = tx_info.receipts_outcome;
+                        data.append(&mut receipts_outcome);
+                        data
+                    }
+                    _ => continue,
+                }
             } else {
-                println!("Failed get tx");
-                return false;
-            }
+                println!("Failed get tx: {:?}", tx.hash);
+                continue;
+            };
+            let mut outputs: Vec<String> = outcome.iter().fold(vec![], |mut res, o| {
+                let mut log = o.outcome.logs.clone();
+                res.append(&mut log);
+                res
+            });
+            results.append(&mut outputs);
         }
-        true
+        results
     }
 
     /// Get transactions from chunks
@@ -129,13 +151,14 @@ impl RPC {
             {
                 chunk_data
             } else {
+                println!("Failed get chunk: {:?}", chunk.chunk_hash);
                 continue;
             };
             for tx in &chunk_data.transactions {
                 if tx.receiver_id.as_str() != AURORA_CONTRACT {
                     continue;
                 }
-                let _ = self.get_actions_output(tx).await;
+                let _outputs = self.get_actions_output(tx).await;
             }
         }
         Ok(vec![])
