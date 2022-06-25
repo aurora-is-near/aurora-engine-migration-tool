@@ -26,7 +26,8 @@ pub struct RPC {
     pub client: JsonRpcClient,
     pub latest_block_height: BlockHeight,
     pub unresolved_blocks: HashSet<BlockHeight>,
-    pub unresolved_txs: HashSet<BlockHeight>,
+    pub unresolved_chunks: HashSet<CryptoHash>,
+    pub unresolved_txs: HashSet<CryptoHash>,
 }
 
 pub enum BlockKind {
@@ -53,6 +54,7 @@ impl RPC {
             client,
             latest_block_height: block.header.height,
             unresolved_blocks: HashSet::new(),
+            unresolved_chunks: HashSet::new(),
             unresolved_txs: HashSet::new(),
         })
     }
@@ -93,7 +95,7 @@ impl RPC {
     }
 
     /// Get action output for chunk transactions (including receipt output)
-    pub async fn get_actions_output(&self, tx: &SignedTransactionView) -> Vec<String> {
+    pub async fn get_actions_output(&mut self, tx: &SignedTransactionView) -> Vec<String> {
         let mut results: Vec<String> = vec![];
         for action in &tx.actions {
             let method_name = match action {
@@ -122,6 +124,7 @@ impl RPC {
                 }
             } else {
                 println!("Failed get tx: {:?}", tx.hash);
+                self.unresolved_txs.insert(tx.hash);
                 continue;
             };
             let mut outputs: Vec<String> = outcome.iter().fold(vec![], |mut res, o| {
@@ -134,11 +137,9 @@ impl RPC {
         results
     }
 
-    /// Get transactions from chunks
-    pub async fn get_transactions(
-        &mut self,
-        chunks: Vec<ChunkHeaderView>,
-    ) -> anyhow::Result<Vec<TransactionView>> {
+    /// Get transactions outcome from chunks
+    pub async fn get_transactions_outcome(&mut self, chunks: Vec<ChunkHeaderView>) -> Vec<String> {
+        let mut results = vec![];
         for chunk in chunks {
             let chunk_data = if let Ok(chunk_data) = self
                 .call(methods::chunk::RpcChunkRequest {
@@ -152,15 +153,17 @@ impl RPC {
                 chunk_data
             } else {
                 println!("Failed get chunk: {:?}", chunk.chunk_hash);
+                self.unresolved_chunks.insert(chunk.chunk_hash);
                 continue;
             };
             for tx in &chunk_data.transactions {
                 if tx.receiver_id.as_str() != AURORA_CONTRACT {
                     continue;
                 }
-                let _outputs = self.get_actions_output(tx).await;
+                let mut outputs = self.get_actions_output(tx).await;
+                results.append(&mut outputs);
             }
         }
-        Ok(vec![])
+        results
     }
 }
