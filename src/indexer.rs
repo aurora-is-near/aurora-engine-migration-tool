@@ -7,23 +7,26 @@ use near_primitives::views::ActionView;
 use std::collections::HashSet;
 use std::io::Write;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::time::Instant;
 
-#[derive(Debug, BorshSerialize, BorshDeserialize)]
+const SAVE_FILE_TIMEOUT: Duration = Duration::from_secs(60);
+
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
 pub struct TxData {
     hash: CryptoHash,
     action: String,
     output: Vec<String>,
 }
 
-#[derive(Debug, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
 pub struct BlockData {
     pub block_height: BlockHeight,
     pub transactions: Vec<TxData>,
 }
 
-#[derive(Debug, Default, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Default, Clone, BorshSerialize, BorshDeserialize)]
 pub struct IndexerData {
     pub blocks: Vec<BlockData>,
     pub first_block: BlockHeight,
@@ -51,39 +54,57 @@ impl Indexer {
         }
     }
 
-    async fn receiver(mut rx: tokio::sync::mpsc::Receiver<Vec<String>>) {
-        while let Some(message) = rx.recv().await {
-            println!("MSG = {:#?}", message);
+    fn save_data(_data: Arc<Mutex<IndexerData>>) {}
+
+    pub fn set_indexed_data(
+        data: Arc<Mutex<IndexerData>>,
+        height: BlockHeight,
+        _output: Vec<String>,
+    ) {
+        let mut data = data.lock().unwrap();
+        data.last_block = height;
+        if data.first_block == 0 {
+            data.first_block = height;
         }
     }
 
     pub async fn run(&mut self) -> anyhow::Result<()> {
         let mut rpc = RPC::new().await?;
-        let (tx, rx) = tokio::sync::mpsc::channel(100);
-        tokio::spawn(async move {
-            Self::receiver(rx).await;
-        });
-
-        let current_block = rpc.get_block(BlockKind::Latest).await?;
-        let block = if self.fetch_history {
-            if current_block.0 - self.data.last_block > 0 {
-                rpc.get_block(BlockKind::Height(self.data.last_block + 1))
-                    .await?
+        let data = Arc::new(Mutex::new(self.data.clone()));
+        loop {
+            let current_block = rpc.get_block(BlockKind::Latest).await?;
+            if self.data.last_block == current_block.0 {
+                continue;
+            }
+            let block = if self.fetch_history {
+                if current_block.0 - self.data.last_block > 0 {
+                    rpc.get_block(BlockKind::Height(self.data.last_block + 1))
+                        .await?
+                } else {
+                    current_block
+                }
             } else {
                 current_block
-            }
-        } else {
-            current_block
-        };
-        let out = rpc.get_transactions_outcome(block.1).await;
-        println!("Output: {:#?}", out);
-        if !out.is_empty() {
-            tokio::spawn(async move {
-                tx.send(out).await.unwrap();
-            });
-        }
+            };
+            print!("\rHeight: {:?}", block.0);
+            std::io::stdout().flush().expect("Flush failed");
 
-        Ok(())
+            let out = rpc.get_transactions_outcome(block.1).await;
+
+            {
+                let data = data.clone();
+                Self::set_indexed_data(data, block.0, out);
+            }
+
+            // Save data
+            if self.last_saved_time.elapsed() > SAVE_FILE_TIMEOUT {
+                self.last_saved_time = Instant::now();
+                let data = data.clone();
+                tokio::spawn(async {
+                    Self::save_data(data);
+                });
+            }
+        }
     }
 
     pub async fn indexer(_history: bool) -> anyhow::Result<()> {
