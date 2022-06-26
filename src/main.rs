@@ -49,8 +49,8 @@ async fn main() -> anyhow::Result<()> {
             parser::parse(snapshot_json_file, output.cloned());
         }
         Some(("indexer", cmd)) => {
-            let _history = cmd.get_flag("history");
-            Indexer::nex("tst.borsh".into());
+            let history = cmd.get_flag("history");
+            Indexer::new("data.borsh".into(), history).run().await?;
             // indexer::indexer(history).await?;
         }
         _ => (),

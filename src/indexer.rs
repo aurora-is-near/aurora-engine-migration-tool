@@ -1,3 +1,4 @@
+use crate::rpc::{BlockKind, RPC};
 use borsh::{BorshDeserialize, BorshSerialize};
 use near_jsonrpc_client::{methods, JsonRpcClient};
 use near_primitives::hash::CryptoHash;
@@ -6,7 +7,6 @@ use near_primitives::views::ActionView;
 use std::collections::HashSet;
 use std::io::Write;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::time::Instant;
 
@@ -23,7 +23,7 @@ pub struct BlockData {
     pub transactions: Vec<TxData>,
 }
 
-#[derive(Debug, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Default, BorshSerialize, BorshDeserialize)]
 pub struct IndexerData {
     pub blocks: Vec<BlockData>,
     pub first_block: BlockHeight,
@@ -33,21 +33,57 @@ pub struct IndexerData {
 }
 
 pub struct Indexer {
-    pub data: Arc<Mutex<IndexerData>>,
+    pub data: IndexerData,
     pub data_file: PathBuf,
     pub last_saved_time: Instant,
+    pub fetch_history: bool,
 }
 
 impl Indexer {
-    pub fn nex(data_file: PathBuf) -> Self {
-        let data = std::fs::read(&data_file).expect("Failed read data file");
-        let data: IndexerData =
-            IndexerData::try_from_slice(&data[..]).expect("Failed parse data file");
+    pub fn new(data_file: PathBuf, get_history: bool) -> Self {
+        let data = std::fs::read(&data_file).unwrap_or_default();
+        let data: IndexerData = IndexerData::try_from_slice(&data[..]).unwrap_or_default();
         Self {
-            data: Arc::new(Mutex::new(data)),
+            data,
             data_file,
             last_saved_time: Instant::now(),
+            fetch_history: get_history,
         }
+    }
+
+    async fn receiver(mut rx: tokio::sync::mpsc::Receiver<Vec<String>>) {
+        while let Some(message) = rx.recv().await {
+            println!("MSG = {:#?}", message);
+        }
+    }
+
+    pub async fn run(&mut self) -> anyhow::Result<()> {
+        let mut rpc = RPC::new().await?;
+        let (tx, rx) = tokio::sync::mpsc::channel(100);
+        tokio::spawn(async move {
+            Self::receiver(rx).await;
+        });
+
+        let current_block = rpc.get_block(BlockKind::Latest).await?;
+        let block = if self.fetch_history {
+            if current_block.0 - self.data.last_block > 0 {
+                rpc.get_block(BlockKind::Height(self.data.last_block + 1))
+                    .await?
+            } else {
+                current_block
+            }
+        } else {
+            current_block
+        };
+        let out = rpc.get_transactions_outcome(block.1).await;
+        println!("Output: {:#?}", out);
+        if !out.is_empty() {
+            tokio::spawn(async move {
+                tx.send(out).await.unwrap();
+            });
+        }
+
+        Ok(())
     }
 
     pub async fn indexer(_history: bool) -> anyhow::Result<()> {
