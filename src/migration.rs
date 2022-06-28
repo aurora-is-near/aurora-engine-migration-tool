@@ -1,3 +1,43 @@
+use crate::rpc::RPC;
+use aurora_engine_migration_tool::StateData;
+use borsh::BorshDeserialize;
+use std::path::PathBuf;
+
+pub struct MigrationConfig {
+    pub signer_account_id: String,
+    pub signer_secret_key: String,
+    pub contract: String,
+}
+pub struct Migration {
+    pub rpc: RPC,
+    pub data: StateData,
+    pub config: MigrationConfig,
+}
+impl Migration {
+    pub async fn new(
+        data_file: &PathBuf,
+        signer_account_id: String,
+        signer_secret_key: String,
+        contract: String,
+    ) -> anyhow::Result<Self> {
+        let data = std::fs::read(data_file).unwrap_or_default();
+        let data: StateData = StateData::try_from_slice(&data[..]).expect("Failed parse data");
+
+        Ok(Self {
+            rpc: RPC::new().await?,
+            data,
+            config: MigrationConfig {
+                signer_account_id,
+                signer_secret_key,
+                contract,
+            },
+        })
+    }
+
+    pub async fn run(&self) -> anyhow::Result<()> {
+        Ok(())
+    }
+}
 /*
 async fn rpc() -> anyhow::Result<bool> {
     use near_jsonrpc_client::{methods, JsonRpcClient};

@@ -1,5 +1,7 @@
 use crate::indexer::Indexer;
+use crate::migration::Migration;
 use clap::{arg, command, value_parser, ArgAction, Command};
+use near_sdk::AccountId;
 use std::path::PathBuf;
 
 pub mod indexer;
@@ -33,6 +35,29 @@ async fn main() -> anyhow::Result<()> {
                         .action(ArgAction::SetTrue),
                 ),
         )
+        .subcommand(
+            Command::new("migrate")
+                .about("migrate Aurora contract NEP-141 state")
+                .arg(
+                    arg!(-f --file <FILE> "prepared state file for migration")
+                        .required(true)
+                        .value_parser(value_parser!(PathBuf)),
+                )
+                .arg(
+                    arg!(-a --account-id <ACCOUNT_ID> "Account ID to run migration")
+                        .required(true)
+                        .value_parser(value_parser!(AccountId)),
+                )
+                .arg(
+                    arg!(-k --account-key <ACCOUNT_KEY> "Account private key for sign migration transactions")
+                        .required(true),
+                )
+                .arg(
+                    arg!(-c --contract <CONTRACT> "Contract to migrate data")
+                        .required(true)
+                        .value_parser(value_parser!(AccountId)),
+                ),
+        )
         .get_matches();
 
     println!(
@@ -52,6 +77,27 @@ async fn main() -> anyhow::Result<()> {
             let history = cmd.get_flag("history");
             Indexer::new("data.borsh".into(), history).run().await?;
             // indexer::indexer(history).await?;
+        }
+        Some(("migrate", cmd)) => {
+            let data_file = cmd.get_one::<PathBuf>("file").expect("Expected data file");
+            let account_id = cmd
+                .get_one::<String>("account-id")
+                .expect("Expected account-id");
+            let account_key = cmd
+                .get_one::<String>("account-key")
+                .expect("Expected account-key");
+            let contract = cmd
+                .get_one::<String>("contract")
+                .expect("Expected contract");
+            Migration::new(
+                data_file,
+                account_id.clone(),
+                account_key.clone(),
+                contract.clone(),
+            )
+            .await?
+            .run()
+            .await?;
         }
         _ => (),
     }
