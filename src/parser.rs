@@ -4,6 +4,7 @@ use aurora_engine_types::storage::{EthConnectorStorageId, KeyPrefix, VersionPref
 use aurora_engine_types::types::NEP141Wei;
 use aurora_engine_types::HashMap;
 use borsh::{BorshDeserialize, BorshSerialize};
+use std::path::PathBuf;
 
 pub fn bytes_to_key(prefix: KeyPrefix, bytes: &[u8]) -> Vec<u8> {
     [&[u8::from(VersionPrefix::V1)], &[u8::from(prefix)], bytes].concat()
@@ -46,7 +47,7 @@ pub fn get_contract_key() -> Vec<u8> {
     construct_contract_key(&EthConnectorStorageId::FungibleToken)
 }
 
-pub fn parse(json_file: String) {
+pub fn parse(json_file: &PathBuf) {
     let data = std::fs::read_to_string(json_file).expect("Failed read data");
 
     let json_data: BlockData = serde_json::from_str(&data).expect("Failed read json");
