@@ -5,9 +5,12 @@ use aurora_engine_types::types::NEP141Wei;
 use aurora_engine_types::HashMap;
 use borsh::{BorshDeserialize, BorshSerialize};
 use near_primitives::types::BlockHeight;
+use near_primitives::views::ActionView;
 use std::collections::HashSet;
 use std::env::args;
 use std::time::Duration;
+
+pub mod rpc;
 
 pub fn bytes_to_key(prefix: KeyPrefix, bytes: &[u8]) -> Vec<u8> {
     [&[u8::from(VersionPrefix::V1)], &[u8::from(prefix)], bytes].concat()
@@ -58,75 +61,71 @@ async fn indexer() -> anyhow::Result<()> {
 
     let client = JsonRpcClient::connect("https://rpc.mainnet.near.org");
     let mut block_height_pool: HashSet<BlockHeight> = HashSet::new();
-    //let mut height: u64 = 105988392;
+    let block = client
+        .call(methods::block::RpcBlockRequest {
+            block_reference: block_reference.clone(),
+        })
+        .await
+        .expect("Failed get latest block");
+    let final_height: u64 = block.header.height;
+    let mut height: u64 = final_height;
+    let block_limit = 100;
     loop {
-        // let block_reference = near_primitives::types::BlockReference::BlockId(
-        //     near_primitives::types::BlockId::Height(height),
-        // );
-        match client
-            .call(methods::block::RpcBlockRequest {
-                block_reference: block_reference.clone(),
+        if let Ok(chunk_res) = client
+            .call(methods::chunk::RpcChunkRequest {
+                chunk_reference:
+                    near_jsonrpc_primitives::types::chunks::ChunkReference::BlockShardId {
+                        block_id: near_primitives::types::BlockId::Height(height),
+                        shard_id: near_primitives::types::ShardId::from(3u8),
+                    },
             })
             .await
         {
-            Ok(block_details) => {
-                if !block_height_pool.contains(&block_details.header.height) {
-                    println!("Block: {:#?}", block_details.header.height);
-                    block_height_pool.insert(block_details.header.height);
-                    println!("Chunks: {:#?}", block_details.chunks.len());
-                    for chunk in block_details.chunks {
-                        if let Ok(chunk_res) = client
-                            .call(methods::chunk::RpcChunkRequest {
-                                chunk_reference:
-                                near_jsonrpc_primitives::types::chunks::ChunkReference::ChunkHash {
-                                    chunk_id: chunk.chunk_hash,
-                                },
-                            })
-                            .await {
-
-                            println!("Tx: {:?} Rspt: {:?}", chunk_res.transactions.len(),chunk_res.receipts.len() );
-                            if chunk_res.transactions.len() > 0 {
-                                for tx in &chunk_res.transactions {
-                                    if tx.receiver_id.as_str() == "aurora" {
-                                        println!("[{:?}] {:?}", chunk_res.header.shard_id, tx);
-                                    }
+            println!(
+                "Tx: {:?} Rspt: {:?}",
+                chunk_res.transactions.len(),
+                chunk_res.receipts.len()
+            );
+            if !chunk_res.transactions.is_empty() {
+                for tx in &chunk_res.transactions {
+                    if tx.receiver_id.as_str() == "aurora" {
+                        for action in &tx.actions {
+                            if let ActionView::FunctionCall { method_name, .. } = action {
+                                tokio::time::sleep(Duration::from_millis(1000)).await;
+                                println!(" {:?}", method_name);
+                                if let Ok(tx_info) = client
+                                    .call(methods::tx::RpcTransactionStatusRequest {
+                                        transaction_info:
+                                            methods::tx::TransactionInfo::TransactionId {
+                                                hash: tx.hash,
+                                                account_id: tx.signer_id.clone(),
+                                            },
+                                    })
+                                    .await
+                                {
+                                    //tx_info.receipts_outcome[0].outcome.logs
+                                    println!("Tx: {:#?}", tx_info);
                                 }
                             }
-                            /*if let Ok(chunk_res) = client
-                                .call(methods::EXPERIMENTAL_tx_status::TransactionInfo {
-                                    chunk_reference:
-                                    near_jsonrpc_primitives::types::chunks::ChunkReference::ChunkHash {
-                                        chunk_id: chunk.chunk_hash,
-                                    },
-                                })
-                                 .await {
-                                println!("Tx: {:?} Rspt: {:?}", chunk_res.transactions.len(),chunk_res.receipts.len() );
-                            }*/
-
-                       } else  {
-                            println!("Failed get chunk");
                         }
                     }
                 }
             }
-            Err(err) => match err.handler_error() {
-                Some(methods::block::RpcBlockError::UnknownBlock { .. }) => {
-                    println!("(i) Unknown block!");
-                    continue;
-                }
-                Some(err) => {
-                    println!("(i) An error occurred `{:#?}`", err);
-                    continue;
-                }
-                _ => println!("(i) A non-handler error ocurred `{:#?}`", err),
-            },
-        };
+        } else {
+            println!("Failed get chunk for height: {:?}", height);
+            block_height_pool.insert(height);
+        }
 
         tokio::time::sleep(Duration::from_millis(1000)).await;
-        // height -= 1;
+        height -= 1;
+        if height <= final_height - block_limit {
+            break;
+        }
     }
+    Ok(())
 }
 
+/*
 async fn rpc() -> anyhow::Result<bool> {
     use near_jsonrpc_client::{methods, JsonRpcClient};
     use near_jsonrpc_primitives::types::query::QueryResponseKind;
@@ -155,6 +154,7 @@ async fn rpc() -> anyhow::Result<bool> {
     }
     Ok(true)
 }
+*/
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
