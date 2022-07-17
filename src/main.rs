@@ -8,6 +8,7 @@ use near_primitives::types::BlockHeight;
 use near_primitives::views::ActionView;
 use std::collections::HashSet;
 use std::env::args;
+use std::io::Write;
 use std::time::Duration;
 
 pub mod rpc;
@@ -68,55 +69,75 @@ async fn indexer() -> anyhow::Result<()> {
         .await
         .expect("Failed get latest block");
     let final_height: u64 = block.header.height;
-    let mut height: u64 = final_height;
-    let block_limit = 100;
+    let mut height: u64 = 79372150; // final_height;
+    let block_limit = 10_000_000;
+
+    println!("Starting height: {:?}", height);
     loop {
-        if let Ok(chunk_res) = client
-            .call(methods::chunk::RpcChunkRequest {
-                chunk_reference:
-                    near_jsonrpc_primitives::types::chunks::ChunkReference::BlockShardId {
-                        block_id: near_primitives::types::BlockId::Height(height),
-                        shard_id: near_primitives::types::ShardId::from(3u8),
-                    },
-            })
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        print!("\rHeight: {:?}", height);
+        std::io::stdout().flush().expect("Flush failed");
+
+        let block_reference = near_primitives::types::BlockReference::BlockId(
+            near_primitives::types::BlockId::Height(height),
+        );
+        let chunks = if let Ok(block_res) = client
+            .call(methods::block::RpcBlockRequest { block_reference })
             .await
         {
-            println!(
-                "Tx: {:?} Rspt: {:?}",
-                chunk_res.transactions.len(),
-                chunk_res.receipts.len()
-            );
-            if !chunk_res.transactions.is_empty() {
-                for tx in &chunk_res.transactions {
-                    if tx.receiver_id.as_str() == "aurora" {
-                        for action in &tx.actions {
-                            if let ActionView::FunctionCall { method_name, .. } = action {
-                                tokio::time::sleep(Duration::from_millis(1000)).await;
-                                println!(" {:?}", method_name);
-                                if let Ok(tx_info) = client
-                                    .call(methods::tx::RpcTransactionStatusRequest {
-                                        transaction_info:
-                                            methods::tx::TransactionInfo::TransactionId {
-                                                hash: tx.hash,
-                                                account_id: tx.signer_id.clone(),
-                                            },
-                                    })
-                                    .await
-                                {
-                                    //tx_info.receipts_outcome[0].outcome.logs
-                                    println!("Tx: {:#?}", tx_info);
+            block_res.chunks
+        } else {
+            println!("\nFailed get block: {:?}", height);
+            continue;
+        };
+        for chunk in chunks {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            if let Ok(chunk_res) = client
+                .call(methods::chunk::RpcChunkRequest {
+                    chunk_reference:
+                        near_jsonrpc_primitives::types::chunks::ChunkReference::ChunkHash {
+                            chunk_id: chunk.chunk_hash,
+                        },
+                })
+                .await
+            {
+                if !chunk_res.transactions.is_empty() {
+                    for tx in &chunk_res.transactions {
+                        if tx.receiver_id.as_str() == "aurora" {
+                            for action in &tx.actions {
+                                if let ActionView::FunctionCall { method_name, .. } = action {
+                                    if method_name == "submit" {
+                                        continue;
+                                    }
+                                    tokio::time::sleep(Duration::from_millis(50)).await;
+
+                                    println!(
+                                        "\n{:?} [{:?}]: {:?}",
+                                        height, chunk.shard_id, method_name
+                                    );
+                                    if let Ok(tx_info) = client
+                                        .call(methods::tx::RpcTransactionStatusRequest {
+                                            transaction_info:
+                                                methods::tx::TransactionInfo::TransactionId {
+                                                    hash: tx.hash,
+                                                    account_id: tx.signer_id.clone(),
+                                                },
+                                        })
+                                        .await
+                                    {
+                                        println!("\nTx: {:#?}", tx_info.status);
+                                    }
                                 }
                             }
                         }
                     }
                 }
+            } else {
+                println!("\nFailed get chunk for height: {:?}", height);
+                block_height_pool.insert(height);
             }
-        } else {
-            println!("Failed get chunk for height: {:?}", height);
-            block_height_pool.insert(height);
         }
-
-        tokio::time::sleep(Duration::from_millis(1000)).await;
         height -= 1;
         if height <= final_height - block_limit {
             break;
