@@ -1,0 +1,16 @@
+[package]
+name = "aurora-engine-migration-tool"
+version = "0.1.0"
+authors = ["Aurora Labs <hello@aurora.dev>", "Evgeny Ukhanov <evgeny@aurora.dev>"]
+edition = "2021"
+description = ""
+documentation = ""
+readme = true
+homepage = "https://github.com/aurora-is-near/aurora-engine-migration-tool"
+repository = "https://github.com/aurora-is-near/aurora-engine-migration-tool"
+license = "CC0 1.0"
+publish = false
+autobenches = false
+
+[dependencies]
+aurora-engine-types = { git = "https://github.com/aurora-is-near/aurora-engine.git", branch = "develop", default-features = false }
