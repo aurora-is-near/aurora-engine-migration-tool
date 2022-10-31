@@ -17,3 +17,4 @@ aurora-engine-types = { git = "https://github.com/aurora-is-near/aurora-engine.g
 serde = "1"
 serde_json = "1"
 serde_derive = "1"
+base64 = "0.13.1"

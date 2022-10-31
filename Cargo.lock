@@ -18,6 +18,7 @@ name = "aurora-engine-migration-tool"
 version = "0.1.0"
 dependencies = [
  "aurora-engine-types",
+ "base64",
  "serde",
  "serde_derive",
  "serde_json",
@@ -32,6 +33,12 @@ dependencies = [
  "hex",
  "primitive-types",
 ]
+
+[[package]]
+name = "base64"
+version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9e1b586273c5702936fe7b7d6896644d8be71e6314cfe09d3167c95f712589e8"
 
 [[package]]
 name = "borsh"
