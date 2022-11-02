@@ -1,5 +1,6 @@
 use aurora_engine_types::account_id::AccountId;
 use aurora_engine_types::storage::{EthConnectorStorageId, KeyPrefix, VersionPrefix};
+// use aurora_engine_types::types::NEP141Wei;
 use serde_derive::Deserialize;
 use std::env::args;
 
@@ -39,6 +40,24 @@ pub fn prefix_account_key() -> Vec<u8> {
     )
 }
 
+pub fn get_statistic_key() -> Vec<u8> {
+    bytes_to_key(
+        KeyPrefix::EthConnector,
+        &[u8::from(
+            EthConnectorStorageId::StatisticsAuroraAccountsCounter,
+        )],
+    )
+}
+
+pub fn read_u64(value: &[u8]) -> u64 {
+    if value.len() != 8 {
+        panic!("Failed parse u64")
+    }
+    let mut result = [0u8; 8];
+    result.copy_from_slice(value.as_ref());
+    u64::from_le_bytes(result)
+}
+
 fn main() {
     println!(
         "Aurora Engine migration tool v{}",
@@ -53,8 +72,10 @@ fn main() {
 
     let proof_prefix = &prefix_proof_key()[..];
     let account_prefix = &prefix_account_key()[..];
+    let account_counter_key = &get_statistic_key()[..];
     let mut proofs: Vec<String> = vec![];
     let mut accounts: Vec<AccountId> = vec![];
+    let mut accounts_counter: u64 = 0;
     for value in &json_data.result.values {
         let key = base64::decode(&value.key).expect("Failed deserialize key");
         // Get proofs
@@ -62,6 +83,7 @@ fn main() {
             let val = key[proof_prefix.len()..].to_vec();
             let proof = String::from_utf8(val).expect("Failed parse proof");
             proofs.push(proof);
+            continue;
         }
         // Get accounts
         if key.len() > account_prefix.len() && &key[..account_prefix.len()] == account_prefix {
@@ -70,8 +92,21 @@ fn main() {
                 AccountId::try_from(String::from_utf8(val).expect("Failed parse account"))
                     .expect("Failed parse account");
             accounts.push(account);
+            continue;
+        }
+        // Account statistics
+        if key == account_counter_key {
+            let val = base64::decode(&value.value).expect("Failed get account counter");
+            accounts_counter = read_u64(&val[..]);
+            continue;
         }
     }
     println!("Proofs: {:?}", proofs.len());
     println!("Accounts: {:?}", accounts.len());
+    assert_eq!(
+        accounts.len() as u64,
+        accounts_counter,
+        "Wrong accounts count"
+    );
+    println!("Accounts counter: {:?}", accounts_counter);
 }
