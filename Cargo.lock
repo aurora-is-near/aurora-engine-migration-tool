@@ -19,6 +19,7 @@ version = "0.1.0"
 dependencies = [
  "aurora-engine-types",
  "base64",
+ "borsh",
  "serde",
  "serde_derive",
  "serde_json",

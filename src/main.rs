@@ -1,6 +1,7 @@
 use aurora_engine_types::account_id::AccountId;
 use aurora_engine_types::storage::{EthConnectorStorageId, KeyPrefix, VersionPrefix};
-// use aurora_engine_types::types::NEP141Wei;
+use aurora_engine_types::types::{NEP141Wei, StorageUsage};
+use borsh::BorshDeserialize;
 use serde_derive::Deserialize;
 use std::env::args;
 
@@ -19,6 +20,13 @@ pub struct ResultData {
 #[derive(Deserialize, Debug)]
 pub struct BlockData {
     pub result: ResultData,
+}
+
+#[derive(Debug, Default, BorshDeserialize)]
+pub struct FungibleToken {
+    pub total_eth_supply_on_near: NEP141Wei,
+    pub total_eth_supply_on_aurora: NEP141Wei,
+    pub account_storage_usage: StorageUsage,
 }
 
 pub fn bytes_to_key(prefix: KeyPrefix, bytes: &[u8]) -> Vec<u8> {
@@ -58,6 +66,10 @@ pub fn read_u64(value: &[u8]) -> u64 {
     u64::from_le_bytes(result)
 }
 
+pub fn get_contract_key() -> Vec<u8> {
+    construct_contract_key(&EthConnectorStorageId::FungibleToken)
+}
+
 fn main() {
     println!(
         "Aurora Engine migration tool v{}",
@@ -91,6 +103,7 @@ fn main() {
             let account =
                 AccountId::try_from(String::from_utf8(val).expect("Failed parse account"))
                     .expect("Failed parse account");
+            // NEP141Wei::try_from_slice(&s.to_vec()
             accounts.push(account);
             continue;
         }
