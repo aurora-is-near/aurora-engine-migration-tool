@@ -88,6 +88,7 @@ fn main() {
     let mut proofs: Vec<String> = vec![];
     let mut accounts: Vec<AccountId> = vec![];
     let mut accounts_counter: u64 = 0;
+    let mut contract_data: FungibleToken = FungibleToken::default();
     for value in &json_data.result.values {
         let key = base64::decode(&value.key).expect("Failed deserialize key");
         // Get proofs
@@ -113,6 +114,12 @@ fn main() {
             accounts_counter = read_u64(&val[..]);
             continue;
         }
+        // Get contract data
+        if key == get_contract_key() {
+            let val = &base64::decode(&value.value).expect("Failed get contract data")[..];
+            contract_data = FungibleToken::try_from_slice(val).expect("Failed parse contract data");
+            continue;
+        }
     }
     println!("Proofs: {:?}", proofs.len());
     println!("Accounts: {:?}", accounts.len());
@@ -122,4 +129,5 @@ fn main() {
         "Wrong accounts count"
     );
     println!("Accounts counter: {:?}", accounts_counter);
+    let _ = contract_data;
 }
