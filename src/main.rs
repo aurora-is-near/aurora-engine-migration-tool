@@ -1,6 +1,7 @@
 use aurora_engine_types::account_id::AccountId;
 use aurora_engine_types::storage::{EthConnectorStorageId, KeyPrefix, VersionPrefix};
 use aurora_engine_types::types::{NEP141Wei, StorageUsage};
+use aurora_engine_types::HashMap;
 use borsh::BorshDeserialize;
 use serde_derive::Deserialize;
 use std::env::args;
@@ -86,7 +87,7 @@ fn main() {
     let account_prefix = &prefix_account_key()[..];
     let account_counter_key = &get_statistic_key()[..];
     let mut proofs: Vec<String> = vec![];
-    let mut accounts: Vec<AccountId> = vec![];
+    let mut accounts: HashMap<AccountId, NEP141Wei> = HashMap::new();
     let mut accounts_counter: u64 = 0;
     let mut contract_data: FungibleToken = FungibleToken::default();
     for value in &json_data.result.values {
@@ -104,8 +105,11 @@ fn main() {
             let account =
                 AccountId::try_from(String::from_utf8(val).expect("Failed parse account"))
                     .expect("Failed parse account");
-            // NEP141Wei::try_from_slice(&s.to_vec()
-            accounts.push(account);
+            let account_balance = NEP141Wei::try_from_slice(
+                &base64::decode(&value.value).expect("Failed get account balance")[..],
+            )
+            .expect("Failed parse account balance");
+            accounts.insert(account, account_balance);
             continue;
         }
         // Account statistics
@@ -128,6 +132,5 @@ fn main() {
         accounts_counter,
         "Wrong accounts count"
     );
-    println!("Accounts counter: {:?}", accounts_counter);
     let _ = contract_data;
 }
