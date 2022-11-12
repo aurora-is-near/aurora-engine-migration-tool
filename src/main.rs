@@ -2,7 +2,7 @@ use aurora_engine_types::account_id::AccountId;
 use aurora_engine_types::storage::{EthConnectorStorageId, KeyPrefix, VersionPrefix};
 use aurora_engine_types::types::{NEP141Wei, StorageUsage};
 use aurora_engine_types::HashMap;
-use borsh::BorshDeserialize;
+use borsh::{BorshDeserialize, BorshSerialize};
 use serde_derive::Deserialize;
 use std::env::args;
 
@@ -23,11 +23,17 @@ pub struct BlockData {
     pub result: ResultData,
 }
 
-#[derive(Debug, Default, BorshDeserialize)]
+#[derive(Debug, Default, BorshDeserialize, BorshSerialize)]
 pub struct FungibleToken {
     pub total_eth_supply_on_near: NEP141Wei,
     pub total_eth_supply_on_aurora: NEP141Wei,
     pub account_storage_usage: StorageUsage,
+}
+
+#[derive(Debug, BorshSerialize)]
+pub struct StateData {
+    pub contract: FungibleToken,
+    pub accounts: HashMap<AccountId, NEP141Wei>,
 }
 
 pub fn bytes_to_key(prefix: KeyPrefix, bytes: &[u8]) -> Vec<u8> {
