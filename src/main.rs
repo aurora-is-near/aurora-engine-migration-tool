@@ -32,8 +32,10 @@ pub struct FungibleToken {
 
 #[derive(Debug, BorshSerialize)]
 pub struct StateData {
-    pub contract: FungibleToken,
+    pub contract_data: FungibleToken,
     pub accounts: HashMap<AccountId, NEP141Wei>,
+    pub accounts_counter: u64,
+    pub proofs: Vec<String>,
 }
 
 pub fn bytes_to_key(prefix: KeyPrefix, bytes: &[u8]) -> Vec<u8> {
@@ -138,5 +140,17 @@ fn main() {
         accounts_counter,
         "Wrong accounts count"
     );
-    let _ = contract_data;
+    // Store result data
+    let data = StateData {
+        contract_data,
+        accounts,
+        accounts_counter,
+        proofs,
+    }
+    .try_to_vec()
+    .expect("Failed serialize data");
+
+    let file_name = format!("contract_state{:?}.borsh", json_data.result.block_height);
+    println!("Result file: {}", file_name);
+    std::fs::write(file_name, data).expect("Failed save result data");
 }
