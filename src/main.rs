@@ -1,42 +1,10 @@
+use aurora_engine_migration_tool::{BlockData, FungibleToken, StateData};
 use aurora_engine_types::account_id::AccountId;
 use aurora_engine_types::storage::{EthConnectorStorageId, KeyPrefix, VersionPrefix};
-use aurora_engine_types::types::{NEP141Wei, StorageUsage};
+use aurora_engine_types::types::NEP141Wei;
 use aurora_engine_types::HashMap;
 use borsh::{BorshDeserialize, BorshSerialize};
-use serde_derive::Deserialize;
 use std::env::args;
-
-#[derive(Deserialize, Debug)]
-pub struct ResultValues {
-    pub key: String,
-    pub value: String,
-}
-
-#[derive(Deserialize, Debug)]
-pub struct ResultData {
-    pub block_height: u64,
-    pub values: Vec<ResultValues>,
-}
-
-#[derive(Deserialize, Debug)]
-pub struct BlockData {
-    pub result: ResultData,
-}
-
-#[derive(Debug, Default, BorshDeserialize, BorshSerialize)]
-pub struct FungibleToken {
-    pub total_eth_supply_on_near: NEP141Wei,
-    pub total_eth_supply_on_aurora: NEP141Wei,
-    pub account_storage_usage: StorageUsage,
-}
-
-#[derive(Debug, BorshSerialize)]
-pub struct StateData {
-    pub contract_data: FungibleToken,
-    pub accounts: HashMap<AccountId, NEP141Wei>,
-    pub accounts_counter: u64,
-    pub proofs: Vec<String>,
-}
 
 pub fn bytes_to_key(prefix: KeyPrefix, bytes: &[u8]) -> Vec<u8> {
     [&[u8::from(VersionPrefix::V1)], &[u8::from(prefix)], bytes].concat()
