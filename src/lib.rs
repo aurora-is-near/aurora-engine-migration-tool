@@ -28,7 +28,7 @@ pub struct FungibleToken {
     pub account_storage_usage: StorageUsage,
 }
 
-#[derive(Debug, BorshSerialize)]
+#[derive(Debug, BorshSerialize, BorshDeserialize)]
 pub struct StateData {
     pub contract_data: FungibleToken,
     pub accounts: HashMap<AccountId, NEP141Wei>,
