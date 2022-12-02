@@ -25,7 +25,7 @@ pub struct Migration {
     pub config: MigrationConfig,
 }
 
-#[derive(BorshDeserialize, BorshSerialize)]
+#[derive(Debug, BorshDeserialize, BorshSerialize)]
 pub struct MigrationInputData {
     pub accounts: HashMap<AccountId, Balance>,
     pub total_supply: Option<Balance>,
@@ -169,6 +169,7 @@ impl Migration {
             i += limit;
         }
         assert_eq!(proofs_count, self.data.proofs.len());
+        println!();
 
         // Accounts migration
         let mut accounts: HashMap<AccountId, Balance> = HashMap::new();
@@ -221,7 +222,7 @@ impl Migration {
         // Checking the correctness and integrity of data, regardless of
         // the migration process
 
-        println!();
+        println!("\n\n[Check correctness]");
         for (migration_data, counter) in reproducible_data_for_proofs {
             self.check_migration("Proofs", migration_data, counter)
                 .await?;
@@ -237,6 +238,7 @@ impl Migration {
         self.check_migration("Contract data:", contract_migration_data, 1)
             .await?;
 
+        println!();
         Ok(())
     }
 
