@@ -1,8 +1,10 @@
 //! # RPC
 //! RPC toolset for effective communication with near-rpc for specific network.
 use near_jsonrpc_client::{methods, JsonRpcClient, MethodCallResult};
+use near_jsonrpc_primitives::types::query::QueryResponseKind;
 use near_primitives::hash::CryptoHash;
-use near_primitives::types::BlockHeight;
+use near_primitives::transaction::{Action, FunctionCallAction, Transaction};
+use near_primitives::types::{BlockHeight, BlockReference};
 use near_primitives::views::{
     ActionView, ChunkHeaderView, FinalExecutionStatus, SignedTransactionView,
 };
@@ -17,6 +19,9 @@ const NEAR_RPC_ADDRESS: &str = near_jsonrpc_client::NEAR_TESTNET_RPC_URL;
 
 /// NEAR-RPC has limits: 600 req/sec, so we need timeout per requests
 const REQUEST_TIMEOUT: Duration = Duration::from_millis(50);
+
+/// Gas for commit tx to blockchain (300 TGas)
+const GAS_FOR_COMMIT_TX: u64 = 300_000_000_000_000;
 
 const AURORA_CONTRACT: &str = "aurora";
 
@@ -165,5 +170,57 @@ impl RPC {
             }
         }
         results
+    }
+
+    /// Commit transaction and wait respond
+    pub async fn commit_tx(
+        &self,
+        signer_account_id: String,
+        signer_secret_key: String,
+        contract: String,
+        method: String,
+        args: Vec<u8>,
+    ) -> anyhow::Result<()> {
+        let signer = near_crypto::InMemorySigner::from_secret_key(
+            signer_account_id.parse()?,
+            signer_secret_key.parse()?,
+        );
+
+        let access_key_query_response = self
+            .client
+            .call(methods::query::RpcQueryRequest {
+                block_reference: BlockReference::latest(),
+                request: near_primitives::views::QueryRequest::ViewAccessKey {
+                    account_id: signer.account_id.clone(),
+                    public_key: signer.public_key.clone(),
+                },
+            })
+            .await?;
+
+        let current_nonce = match access_key_query_response.kind {
+            QueryResponseKind::AccessKey(access_key) => access_key.nonce,
+            _ => Err("")?,
+        };
+
+        let transaction = Transaction {
+            signer_id: signer.account_id.clone(),
+            public_key: signer.public_key.clone(),
+            nonce: current_nonce + 1,
+            receiver_id: contract.parse()?,
+            block_hash: access_key_query_response.block_hash,
+            actions: vec![Action::FunctionCall(FunctionCallAction {
+                method_name: method,
+                args,
+                gas: GAS_FOR_COMMIT_TX,
+                deposit: 0,
+            })],
+        };
+
+        let request = methods::broadcast_tx_commit::RpcBroadcastTxCommitRequest {
+            signed_transaction: transaction.sign(&signer),
+        };
+
+        let _response = self.client.call(request).await?;
+        Ok(())
     }
 }
