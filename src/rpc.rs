@@ -25,6 +25,26 @@ const GAS_FOR_COMMIT_TX: u64 = 300_000_000_000_000;
 
 const AURORA_CONTRACT: &str = "aurora";
 
+#[derive(Debug)]
+pub enum CommitTxError {
+    AccessKeyFail,
+    CommitFail,
+}
+
+impl std::error::Error for CommitTxError {
+    fn description(&self) -> &str {
+        Box::leak(self.to_string().into_boxed_str())
+    }
+}
+
+impl std::fmt::Display for CommitTxError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::AccessKeyFail => write!(f, "ERR_FAILED_GET_ACCESS_KEY"),
+            Self::CommitFail => write!(f, "ERR_FAILED_COMMIT_TX"),
+        }
+    }
+}
 pub type TransactionView = (near_primitives::types::AccountId, CryptoHash);
 
 pub struct RPC {
@@ -199,7 +219,7 @@ impl RPC {
 
         let current_nonce = match access_key_query_response.kind {
             QueryResponseKind::AccessKey(access_key) => access_key.nonce,
-            _ => Err("")?,
+            _ => Err(CommitTxError::AccessKeyFail)?,
         };
 
         let transaction = Transaction {
@@ -220,7 +240,11 @@ impl RPC {
             signed_transaction: transaction.sign(&signer),
         };
 
-        let _response = self.client.call(request).await?;
+        let _ = self
+            .client
+            .call(request)
+            .await
+            .map_err(|_| CommitTxError::CommitFail)?;
         Ok(())
     }
 }
