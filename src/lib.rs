@@ -1,8 +1,8 @@
 pub use aurora_engine_types::account_id::AccountId;
 pub use aurora_engine_types::types::{NEP141Wei, StorageUsage};
-use aurora_engine_types::HashMap;
 pub use borsh::{BorshDeserialize, BorshSerialize};
 use serde_derive::Deserialize;
+use std::collections::HashMap;
 
 #[derive(Deserialize, Debug)]
 pub struct ResultValues {
@@ -28,7 +28,7 @@ pub struct FungibleToken {
     pub account_storage_usage: StorageUsage,
 }
 
-#[derive(Debug, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Default, BorshSerialize, BorshDeserialize)]
 pub struct StateData {
     pub contract_data: FungibleToken,
     pub accounts: HashMap<AccountId, NEP141Wei>,

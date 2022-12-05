@@ -1,7 +1,6 @@
 use crate::indexer::Indexer;
 use crate::migration::Migration;
 use clap::{arg, command, value_parser, ArgAction, Command};
-use near_sdk::AccountId;
 use std::path::PathBuf;
 
 pub mod indexer;
@@ -44,18 +43,16 @@ async fn main() -> anyhow::Result<()> {
                         .value_parser(value_parser!(PathBuf)),
                 )
                 .arg(
-                    arg!(-a --account-id <ACCOUNT_ID> "Account ID to run migration")
-                        .required(true)
-                        .value_parser(value_parser!(AccountId)),
+                    arg!(-a --account <ACCOUNT_ID> "Account ID to run migration")
+                        .required(true),
                 )
                 .arg(
-                    arg!(-k --account-key <ACCOUNT_KEY> "Account private key for sign migration transactions")
+                    arg!(-k --key <ACCOUNT_KEY> "Account private key for sign migration transactions")
                         .required(true),
                 )
                 .arg(
                     arg!(-c --contract <CONTRACT> "Contract to migrate data")
-                        .required(true)
-                        .value_parser(value_parser!(AccountId)),
+                        .required(true),
                 ),
         )
         .get_matches();
@@ -80,12 +77,11 @@ async fn main() -> anyhow::Result<()> {
         }
         Some(("migrate", cmd)) => {
             let data_file = cmd.get_one::<PathBuf>("file").expect("Expected data file");
+
             let account_id = cmd
-                .get_one::<String>("account-id")
+                .get_one::<String>("account")
                 .expect("Expected account-id");
-            let account_key = cmd
-                .get_one::<String>("account-key")
-                .expect("Expected account-key");
+            let account_key = cmd.get_one::<String>("key").expect("Expected account-key");
             let contract = cmd
                 .get_one::<String>("contract")
                 .expect("Expected contract");

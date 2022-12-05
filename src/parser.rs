@@ -2,8 +2,8 @@ use aurora_engine_migration_tool::{BlockData, FungibleToken, StateData};
 use aurora_engine_types::account_id::AccountId;
 use aurora_engine_types::storage::{EthConnectorStorageId, KeyPrefix, VersionPrefix};
 use aurora_engine_types::types::NEP141Wei;
-use aurora_engine_types::HashMap;
 use borsh::{BorshDeserialize, BorshSerialize};
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 pub fn bytes_to_key(prefix: KeyPrefix, bytes: &[u8]) -> Vec<u8> {
