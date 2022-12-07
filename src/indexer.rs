@@ -114,13 +114,19 @@ impl Indexer {
         let last_block = self.data.lock().unwrap().last_block;
         println!("Starting height: {}", last_block);
         let mut handle = None;
+        let (tx, mut rx) = tokio::sync::mpsc::channel(1);
+
+        tokio::spawn(async move {
+            let _ = tokio::signal::ctrl_c().await;
+            let _ = tx.send(()).await;
+        });
 
         loop {
             tokio::select! {
                 block = client.get_block(BlockKind::Latest) => if let Ok(block) = block {
                     handle = self.handle_block(block, &mut client).await;
                 },
-                _ = tokio::signal::ctrl_c() => break,
+                _ = rx.recv() => break,
                 else => break,
             }
         }
