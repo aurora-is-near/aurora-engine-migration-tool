@@ -112,8 +112,8 @@ pub fn parse<P: AsRef<Path>>(json_file: P, output: Option<P>) -> anyhow::Result<
             KeyType::Unknown => anyhow::bail!("Unknown key type"),
         }
     }
-    println!("Proofs: {:?}", proofs.len());
-    println!("Accounts: {:?}", accounts.len());
+    println!("Proofs: {}", proofs.len());
+    println!("Accounts: {}", accounts.len());
     assert_eq!(
         accounts.len() as u64,
         accounts_counter,

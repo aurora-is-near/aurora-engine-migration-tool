@@ -16,10 +16,10 @@ run: build-mainnet-release
 	@${BIN} --features mainnet --release
 	
 migrate-testnet: build-testnet-release
-	@${BIN} migrate --account ${ACCOUNT_ID} --key ${ACCOUNT_KEY}  --file contract_state.borsh
+	@${BIN} migrate --account ${ACCOUNT_ID} --key ${ACCOUNT_KEY} --file contract_state.borsh
 
 migrate-testnet-indexed: build-testnet-release
-	@${BIN} migrate --account ${ACCOUNT_ID} --key ${ACCOUNT_KEY}  --file for-migtation.borsh
+	@${BIN} migrate --account ${ACCOUNT_ID} --key ${ACCOUNT_KEY} --file for-migtation.borsh
 
 build-index-archival:
 	@cargo build --release --features mainnet-archival
@@ -34,17 +34,16 @@ index-block: build-index-archival
 	@${BIN} indexer --block 82153326
 
 index-latest: build-index
-	@${BIN}  indexer 
+	@${BIN} indexer 
 
 index-history: build-index
-	@${BIN}  indexer -H
+	@${BIN} indexer -H
 	
 index-stat: build-index
-	@${BIN}  indexer --stat
+	@${BIN} indexer --stat
 	
 index-fullstat: build-index
-	@${BIN}  indexer --fullstat
+	@${BIN} indexer --fullstat
 	
 prepare-migration: build-index
-	@${BIN} prepare-migrate-indexed -f  data.borsh -o for-migtation.borsh
-	
+	@${BIN} prepare-migrate-indexed -f data.borsh -o for-migtation.borsh
