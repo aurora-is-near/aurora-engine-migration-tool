@@ -237,4 +237,20 @@ impl Migration {
 
         Ok(())
     }
+
+    /// Prepare indexed data for migration from Indexer data
+    /// and store to file
+    pub async fn prepare_indexed(input: &PathBuf, output: &PathBuf) -> anyhow::Result<()> {
+        use crate::indexer::IndexerData;
+        let data = std::fs::read(input).expect("Failed read indexer data file");
+        let migration_data: IndexerData =
+            IndexerData::try_from_slice(&data[..]).expect("Failed deserialize indexed data");
+
+        std::fs::write(
+            output,
+            migration_data.try_to_vec().expect("Failed serialize"),
+        )
+        .expect("Failed save migration data");
+        Ok(())
+    }
 }

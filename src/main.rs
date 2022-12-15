@@ -49,6 +49,16 @@ async fn main() -> anyhow::Result<()> {
         .subcommand(
             Command::new("migrate-indexed")
                 .about("migrate indexed data")
+                .arg(
+                    arg!(-f --file <FILE> "File with indexed data")
+                        .required(true)
+                        .value_parser(value_parser!(PathBuf)),
+                )
+                .arg(
+                    arg!(-o --output <FILE> "Output file with migration results data")
+                        .required(true)
+                        .value_parser(value_parser!(PathBuf)),
+                ),
         )
         .subcommand(
             Command::new("migrate")
@@ -109,8 +119,12 @@ async fn main() -> anyhow::Result<()> {
                 .run()
                 .await?;
         }
-        Some(("migrate-indexed", _cmd)) => {
-            println!("migrate-indexed");
+        Some(("migrate-indexed", cmd)) => {
+            let input_data_file = cmd.get_one::<PathBuf>("file").expect("Expected data file");
+            let output_file = cmd
+                .get_one::<PathBuf>("output")
+                .expect("Expected output file");
+            Migration::prepare_indexed(input_data_file, output_file).await?;
         }
         _ => (),
     }
