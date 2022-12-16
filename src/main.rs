@@ -47,6 +47,10 @@ async fn main() -> anyhow::Result<()> {
                 ),
         )
         .subcommand(
+            Command::new("migrate-indexed")
+                .about("migrate indexed data")
+        )
+        .subcommand(
             Command::new("migrate")
                 .about("migrate Aurora contract NEP-141 state")
                 .arg(
@@ -104,6 +108,9 @@ async fn main() -> anyhow::Result<()> {
                 .await?
                 .run()
                 .await?;
+        }
+        Some(("migrate-indexed", _cmd)) => {
+            println!("migrate-indexed");
         }
         _ => (),
     }
