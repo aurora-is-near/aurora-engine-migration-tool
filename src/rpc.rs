@@ -42,34 +42,10 @@ const ACTION_METHODS: &[&str] = &[
     "finish_deposit",
 ];
 
-#[derive(Debug)]
-pub enum CommitTxError {
-    AccessKeyFail,
-    CommitFail(String),
-    ViewFail,
-    StatusFail(String),
-}
-
-impl std::error::Error for CommitTxError {
-    fn description(&self) -> &str {
-        Box::leak(self.to_string().into_boxed_str())
-    }
-}
-
-impl std::fmt::Display for CommitTxError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            Self::AccessKeyFail => write!(f, "ERR_FAILED_GET_ACCESS_KEY"),
-            Self::CommitFail(msg) => write!(f, "ERR_FAILED_COMMIT_TX: {}", msg),
-            Self::ViewFail => write!(f, "ERR_FAILED_VIEW_TX"),
-            Self::StatusFail(msg) => write!(f, "ERR_TX_STATUS_FAIL: {}", msg),
-        }
-    }
-}
-pub type TransactionView = (AccountId, CryptoHash);
-
 pub struct RPC {
+    /// NEAR-rpc client
     pub client: JsonRpcClient,
+    /// One possile reason: https://stackoverflow.com/a/72230096
     pub unresolved_blocks: HashSet<BlockHeight>,
 }
 
@@ -494,4 +470,31 @@ fn print_log(msg: &str) {
     #[cfg(feature = "log")]
     // Print witn space shift
     println!(" {msg}")
+}
+
+mod error {
+    #[derive(Debug)]
+    pub enum CommitTxError {
+        AccessKeyFail,
+        CommitFail(String),
+        ViewFail,
+        StatusFail(String),
+    }
+
+    impl std::error::Error for CommitTxError {
+        fn description(&self) -> &str {
+            Box::leak(self.to_string().into_boxed_str())
+        }
+    }
+
+    impl std::fmt::Display for CommitTxError {
+        fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            match self {
+                Self::AccessKeyFail => write!(f, "ERR_FAILED_GET_ACCESS_KEY"),
+                Self::CommitFail(msg) => write!(f, "ERR_FAILED_COMMIT_TX: {}", msg),
+                Self::ViewFail => write!(f, "ERR_FAILED_VIEW_TX"),
+                Self::StatusFail(msg) => write!(f, "ERR_TX_STATUS_FAIL: {}", msg),
+            }
+        }
+    }
 }

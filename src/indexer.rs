@@ -51,7 +51,11 @@ impl Indexer {
         println!("First block: {:?}", data.first_block);
         println!("Last block: {:?}", data.last_block);
         println!("Current block: {:?}", data.current_block);
-        println!("Missed block: {:?}", data.missed_blocks);
+        println!(
+            "Missed block: [{:?}] {:?}",
+            data.missed_blocks.len(),
+            data.missed_blocks
+        );
         println!("Accounts: {:?}", data.data.accounts.len());
         println!("Proofs: {:?}", data.data.proofs.len());
         if extend {
