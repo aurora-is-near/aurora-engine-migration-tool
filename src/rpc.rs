@@ -4,13 +4,14 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use near_jsonrpc_client::{methods, JsonRpcClient, MethodCallResult};
 use near_jsonrpc_primitives::types::query::QueryResponseKind;
-use near_primitives::hash::CryptoHash;
 use near_primitives::transaction::{Action, FunctionCallAction, Transaction};
 use near_primitives::types::{AccountId, BlockHeight, BlockReference};
 use near_primitives::views::{ActionView, ChunkHeaderView, FinalExecutionStatus};
 use near_sdk::json_types::U128;
 use std::collections::HashSet;
 use std::time::Duration;
+
+use self::error::CommitTxError;
 
 #[cfg(feature = "mainnet")]
 const NEAR_RPC_ADDRESS: &str = near_jsonrpc_client::NEAR_MAINNET_RPC_URL;
@@ -385,7 +386,7 @@ impl RPC {
         // Get access key nonce
         let current_nonce = match access_key_query_response.kind {
             QueryResponseKind::AccessKey(access_key) => access_key.nonce,
-            _ => Err(CommitTxError::AccessKeyFail)?,
+            _ => Err(CommitTxError::AccessKey)?,
         };
 
         // Prepare transaction to commit
@@ -415,16 +416,16 @@ impl RPC {
                 .client
                 .call(&request)
                 .await
-                .map_err(|err| CommitTxError::CommitFail(format!("{:?}", err)));
+                .map_err(|err| CommitTxError::Commit(format!("{:?}", err)));
             // Check response and set errors if it needs
             if let Ok(tx_res) = res {
                 // If success - check response status
                 match tx_res.status {
                     FinalExecutionStatus::SuccessValue(_) => return Ok(()),
                     FinalExecutionStatus::Failure(err) => {
-                        res = Err(CommitTxError::StatusFail(format!("{:?}", err)))
+                        res = Err(CommitTxError::Status(format!("{:?}", err)))
                     }
-                    _ => res = Err(CommitTxError::StatusFail("Other".to_string())),
+                    _ => res = Err(CommitTxError::Status("Other".to_string())),
                 }
             }
 
@@ -439,7 +440,7 @@ impl RPC {
     }
 
     /// Request view data for contract method.
-    /// Return error if wrong response type or failed request
+    /// Return error if wrong response type or failfViewed request
     pub async fn request_view(
         &self,
         contract: String,
@@ -461,7 +462,7 @@ impl RPC {
         if let QueryResponseKind::CallResult(result) = response.kind {
             return Ok(result.result);
         }
-        Err(CommitTxError::ViewFail)?
+        Err(CommitTxError::View)?
     }
 }
 
@@ -475,10 +476,10 @@ fn print_log(msg: &str) {
 mod error {
     #[derive(Debug)]
     pub enum CommitTxError {
-        AccessKeyFail,
-        CommitFail(String),
-        ViewFail,
-        StatusFail(String),
+        AccessKey,
+        Commit(String),
+        View,
+        Status(String),
     }
 
     impl std::error::Error for CommitTxError {
@@ -490,10 +491,10 @@ mod error {
     impl std::fmt::Display for CommitTxError {
         fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
             match self {
-                Self::AccessKeyFail => write!(f, "ERR_FAILED_GET_ACCESS_KEY"),
-                Self::CommitFail(msg) => write!(f, "ERR_FAILED_COMMIT_TX: {}", msg),
-                Self::ViewFail => write!(f, "ERR_FAILED_VIEW_TX"),
-                Self::StatusFail(msg) => write!(f, "ERR_TX_STATUS_FAIL: {}", msg),
+                Self::AccessKey => write!(f, "ERR_FAILED_GET_ACCESS_KEY"),
+                Self::Commit(msg) => write!(f, "ERR_FAILED_COMMIT_TX: {}", msg),
+                Self::View => write!(f, "ERR_FAILED_VIEW_TX"),
+                Self::Status(msg) => write!(f, "ERR_TX_STATUS_FAIL: {}", msg),
             }
         }
     }
