@@ -47,7 +47,7 @@ async fn main() -> anyhow::Result<()> {
                 ),
         )
         .subcommand(
-            Command::new("migrate-indexed")
+            Command::new("prepare-migrate-indexed")
                 .about("migrate indexed data")
                 .arg(
                     arg!(-f --file <FILE> "File with indexed data")
@@ -119,7 +119,7 @@ async fn main() -> anyhow::Result<()> {
                 .run()
                 .await?;
         }
-        Some(("migrate-indexed", cmd)) => {
+        Some(("prepare-migrate-indexed", cmd)) => {
             let input_data_file = cmd.get_one::<PathBuf>("file").expect("Expected data file");
             let output_file = cmd
                 .get_one::<PathBuf>("output")

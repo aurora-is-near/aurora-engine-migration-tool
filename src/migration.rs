@@ -1,5 +1,6 @@
 use crate::rpc::RPC;
-use aurora_engine_migration_tool::StateData;
+use aurora_engine_migration_tool::{FungibleToken, StateData};
+use aurora_engine_types::types::NEP141Wei;
 use borsh::{BorshDeserialize, BorshSerialize};
 use near_sdk::{AccountId, Balance, StorageUsage};
 use std::collections::HashMap;
@@ -242,15 +243,38 @@ impl Migration {
     /// and store to file
     pub async fn prepare_indexed(input: &PathBuf, output: &PathBuf) -> anyhow::Result<()> {
         use crate::indexer::IndexerData;
+        use crate::rpc::AURORA_CONTRACT;
+
         let data = std::fs::read(input).expect("Failed read indexer data file");
-        let migration_data: IndexerData =
+        let indexer_data: IndexerData =
             IndexerData::try_from_slice(&data[..]).expect("Failed deserialize indexed data");
 
+        let rpc = RPC::new().await?;
+        for _account in indexer_data.data.accounts {
+            rpc.request_view(
+                AURORA_CONTRACT.to_string(),
+                "get_account".to_string(),
+                vec![],
+            )
+            .await?;
+        }
+
+        let migration_data = StateData {
+            contract_data: FungibleToken {
+                total_eth_supply_on_near: NEP141Wei::new(0),
+                total_eth_supply_on_aurora: NEP141Wei::new(0),
+                account_storage_usage: 0,
+            },
+            accounts: HashMap::new(),
+            accounts_counter: 0,
+            proofs: vec![],
+        };
         std::fs::write(
             output,
             migration_data.try_to_vec().expect("Failed serialize"),
         )
         .expect("Failed save migration data");
+
         Ok(())
     }
 }

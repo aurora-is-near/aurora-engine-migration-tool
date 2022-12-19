@@ -29,7 +29,7 @@ const REQUEST_TIMEOUT: Duration = Duration::from_millis(90);
 const GAS_FOR_COMMIT_TX: u64 = 300_000_000_000_000;
 
 /// Transactions receiver
-const AURORA_CONTRACT: &str = "aurora";
+pub const AURORA_CONTRACT: &str = "aurora";
 
 /// How many retries per success request
 const RETRIES_COUNT: u8 = 10;
