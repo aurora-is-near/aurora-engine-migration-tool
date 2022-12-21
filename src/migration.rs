@@ -2,7 +2,9 @@ use crate::rpc::RPC;
 use aurora_engine_migration_tool::{FungibleToken, StateData};
 use aurora_engine_types::types::NEP141Wei;
 use borsh::{BorshDeserialize, BorshSerialize};
+use near_sdk::json_types::U128;
 use near_sdk::{AccountId, Balance, StorageUsage};
+use serde_json::json;
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::PathBuf;
@@ -250,13 +252,17 @@ impl Migration {
             IndexerData::try_from_slice(&data[..]).expect("Failed deserialize indexed data");
 
         let rpc = RPC::new().await?;
-        for _account in indexer_data.data.accounts {
-            rpc.request_view(
-                AURORA_CONTRACT.to_string(),
-                "get_account".to_string(),
-                vec![],
-            )
-            .await?;
+        for account in indexer_data.data.accounts {
+            let data = rpc
+                .request_view(
+                    AURORA_CONTRACT.to_string(),
+                    "ft_balance_of".to_string(),
+                    json!(account).as_str().unwrap().as_bytes().to_vec(),
+                )
+                .await?;
+            let balance: U128 =
+                serde_json::from_slice(&data[..]).expect("Failed deserialize account balance");
+            println!("{:?}: {:?}", account, balance.0);
         }
 
         let migration_data = StateData {
