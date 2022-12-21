@@ -54,20 +54,21 @@ impl Indexer {
 
     pub fn stats(&self, extend: bool) {
         let data = self.data.lock().unwrap();
-        println!("First block: {:?}", data.first_block);
-        println!("Last block: {:?}", data.last_block);
-        println!("Current block: {:?}", data.current_block);
-        println!(
-            "Missed block: [{:?}] {:?}",
-            data.missed_blocks.len(),
-            data.missed_blocks
-        );
-        println!("Accounts: {:?}", data.data.accounts.len());
-        println!("Proofs: {:?}", data.data.proofs.len());
 
         if extend {
-            println!("Log: {:#?}", data.data.logs);
+            println!("Logs: {:#?}\n", data.data.logs);
+            println!(
+                "Missed block list: [{}] {:?}\n",
+                data.missed_blocks.len(),
+                data.missed_blocks
+            );
         }
+        println!(r#"First block: {:?}"#, data.first_block);
+        println!("Last block: {:?}", data.last_block);
+        println!("Current block: {:?}", data.current_block);
+        println!("Missed blocks: {}", data.missed_blocks.len());
+        println!("Accounts: {}", data.data.accounts.len());
+        println!("Proofs: {}", data.data.proofs.len());
     }
 
     /// Save indexed data
