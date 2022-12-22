@@ -37,3 +37,7 @@ index-stat: build-index
 	
 index-fullstat: build-index
 	@${BIN}  indexer --fullstat
+	
+prepare-migration: build-index
+	@${BIN} prepare-migrate-indexed -f  data.borsh -o for-migtation.borsh
+	

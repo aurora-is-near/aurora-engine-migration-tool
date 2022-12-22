@@ -1,6 +1,5 @@
 use crate::rpc::RPC;
 use aurora_engine_migration_tool::{FungibleToken, StateData};
-use aurora_engine_types::types::NEP141Wei;
 use borsh::{BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::U128;
 use near_sdk::{AccountId, Balance, StorageUsage};
@@ -246,26 +245,13 @@ impl Migration {
     pub async fn prepare_indexed(input: &PathBuf, output: &PathBuf) -> anyhow::Result<()> {
         use crate::indexer::IndexerData;
         use crate::rpc::AURORA_CONTRACT;
+        pub use aurora_engine_types::{account_id::AccountId, types::NEP141Wei};
 
         let data = std::fs::read(input).expect("Failed read indexer data file");
         let indexer_data: IndexerData =
             IndexerData::try_from_slice(&data[..]).expect("Failed deserialize indexed data");
 
-        let rpc = RPC::new().await?;
-        for account in indexer_data.data.accounts {
-            let data = rpc
-                .request_view(
-                    AURORA_CONTRACT.to_string(),
-                    "ft_balance_of".to_string(),
-                    json!(account).as_str().unwrap().as_bytes().to_vec(),
-                )
-                .await?;
-            let balance: U128 =
-                serde_json::from_slice(&data[..]).expect("Failed deserialize account balance");
-            println!("{:?}: {:?}", account, balance.0);
-        }
-
-        let migration_data = StateData {
+        let mut migration_data = StateData {
             contract_data: FungibleToken {
                 total_eth_supply_on_near: NEP141Wei::new(0),
                 total_eth_supply_on_aurora: NEP141Wei::new(0),
@@ -275,6 +261,34 @@ impl Migration {
             accounts_counter: 0,
             proofs: vec![],
         };
+
+        let rpc = RPC::new().await?;
+        for account in indexer_data.data.accounts {
+            let args = json!({ "account_id": account })
+                .to_string()
+                .as_bytes()
+                .to_vec();
+
+            let data = rpc
+                .request_view(
+                    AURORA_CONTRACT.to_string(),
+                    "ft_balance_of".to_string(),
+                    args,
+                )
+                .await?;
+            let balance: U128 =
+                serde_json::from_slice(&data[..]).expect("Failed deserialize account balance");
+            let account_id = AccountId::new(account.as_str()).expect("Failed deserialize account");
+            migration_data
+                .accounts
+                .insert(account_id, NEP141Wei::new(balance.0));
+        }
+        println!("Accounts: {:?}", migration_data.accounts.len());
+
+        // get_accounts_counter
+        // ft_total_supply
+        // storage_balance_of
+
         std::fs::write(
             output,
             migration_data.try_to_vec().expect("Failed serialize"),
