@@ -23,7 +23,7 @@ const NEAR_RPC_ADDRESS: &str = near_jsonrpc_client::NEAR_MAINNET_ARCHIVAL_RPC_UR
 const NEAR_RPC_ADDRESS: &str = near_jsonrpc_client::NEAR_TESTNET_RPC_URL;
 
 /// NEAR-RPC has limits: 600 req/sec, so we need timeout per requests
-const REQUEST_TIMEOUT: Duration = Duration::from_millis(90);
+pub const REQUEST_TIMEOUT: Duration = Duration::from_millis(90);
 
 /// Gas for commit tx to blockchain (300 `TGas`)
 const GAS_FOR_COMMIT_TX: u64 = 300_000_000_000_000;

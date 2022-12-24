@@ -1,12 +1,13 @@
-use crate::rpc::Client;
+use crate::rpc::{Client, REQUEST_TIMEOUT};
 use aurora_engine_migration_tool::{FungibleToken, StateData};
 use aurora_engine_types::{account_id::AccountId, types::NEP141Wei};
 use borsh::{BorshDeserialize, BorshSerialize};
+use near_sdk::json_types::{U128, U64};
 use near_sdk::{Balance, StorageUsage};
+use serde_json::json;
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::Path;
-use near_sdk::json_types::U128;
 
 const MIGRATION_METHOD: &str = "migrate";
 const MIGRATION_CHECK_METHOD: &str = "check_migration_correctness";
@@ -241,7 +242,7 @@ impl Migration {
 
     /// Prepare indexed data for migration from Indexer data
     /// and store to file
-    pub async fn prepare_indexed(input: &PathBuf, output: &PathBuf) -> anyhow::Result<()> {
+    pub async fn prepare_indexed<P: AsRef<Path>>(input: P, output: P) -> anyhow::Result<()> {
         use crate::indexer::IndexerData;
         use crate::rpc::AURORA_CONTRACT;
 
@@ -263,23 +264,20 @@ impl Migration {
         };
 
         let data = rpc
-            .request_view(
-                AURORA_CONTRACT,
-                "get_accounts_counter".to_string(),
-                vec![],
-            )
+            .request_view(AURORA_CONTRACT, "get_accounts_counter".to_string(), vec![])
             .await?;
         migration_data.accounts_counter = U64::try_from_slice(&data).unwrap().0;
 
         let data = rpc
-            .request_view(
-                AURORA_CONTRACT,
-                "ft_total_supply".to_string(),
-                vec![],
-            )
+            .request_view(AURORA_CONTRACT, "ft_total_supply".to_string(), vec![])
             .await?;
         let total_supply: U128 = serde_json::from_slice(&data).unwrap();
         migration_data.contract_data.total_eth_supply_on_near = NEP141Wei::new(total_supply.0);
+
+        let data = rpc
+            .request_view(AURORA_CONTRACT, "storage_balance_of".to_string(), vec![])
+            .await?;
+        migration_data.contract_data.account_storage_usage = serde_json::from_slice(&data).unwrap();
 
         for account in indexer_data.data.accounts {
             let args = json!({ "account_id": account })
@@ -288,11 +286,7 @@ impl Migration {
                 .to_vec();
 
             let data = rpc
-                .request_view(
-                    AURORA_CONTRACT.to_string(),
-                    "ft_balance_of".to_string(),
-                    args,
-                )
+                .request_view(AURORA_CONTRACT, "ft_balance_of".to_string(), args)
                 .await?;
             let balance: U128 =
                 serde_json::from_slice(&data[..]).expect("Failed deserialize account balance");
@@ -306,14 +300,6 @@ impl Migration {
         for proof in indexer_data.data.proofs {
             migration_data.proofs.push(proof);
         }
-        
-        // storage_balance_of
-
-        migration_data
-            .try_to_vec()
-            .and_then(|data| std::fs::write(output, data))
-            .map_err(|e| anyhow::anyhow!("Failed save migration data, {e}"))
-
 
         println!("Proofs: {:?}", migration_data.proofs.len());
         println!("Accounts: {:?}", migration_data.accounts.len());
@@ -322,6 +308,10 @@ impl Migration {
             "Total supply: {:?}",
             migration_data.contract_data.total_eth_supply_on_near
         );
-        Ok(())
+
+        migration_data
+            .try_to_vec()
+            .and_then(|data| std::fs::write(output, data))
+            .map_err(|e| anyhow::anyhow!("Failed save migration data, {e}"))
     }
 }
