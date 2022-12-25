@@ -6,6 +6,7 @@ use near_sdk::{Balance, StorageUsage};
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::Path;
+use near_sdk::json_types::U128;
 
 const MIGRATION_METHOD: &str = "migrate";
 const MIGRATION_CHECK_METHOD: &str = "check_migration_correctness";
@@ -243,11 +244,12 @@ impl Migration {
     pub async fn prepare_indexed(input: &PathBuf, output: &PathBuf) -> anyhow::Result<()> {
         use crate::indexer::IndexerData;
         use crate::rpc::AURORA_CONTRACT;
-        pub use aurora_engine_types::{account_id::AccountId, types::NEP141Wei};
 
-        let data = std::fs::read(input).expect("Failed read indexer data file");
-        let indexer_data: IndexerData =
-            IndexerData::try_from_slice(&data[..]).expect("Failed deserialize indexed data");
+        let data = std::fs::read(input)
+            .map_err(|e| anyhow::anyhow!("Failed read indexer data file, {e}"))?;
+        let indexer_data: IndexerData = IndexerData::try_from_slice(&data)
+            .map_err(|e| anyhow::anyhow!("Failed deserialize indexed data, {e}"))?;
+        let rpc = Client::new();
 
         let mut migration_data = StateData {
             contract_data: FungibleToken {
@@ -260,11 +262,9 @@ impl Migration {
             proofs: vec![],
         };
 
-        let rpc = RPC::new().await?;
-
         let data = rpc
             .request_view(
-                AURORA_CONTRACT.to_string(),
+                AURORA_CONTRACT,
                 "get_accounts_counter".to_string(),
                 vec![],
             )
@@ -273,7 +273,7 @@ impl Migration {
 
         let data = rpc
             .request_view(
-                AURORA_CONTRACT.to_string(),
+                AURORA_CONTRACT,
                 "ft_total_supply".to_string(),
                 vec![],
             )
@@ -306,15 +306,14 @@ impl Migration {
         for proof in indexer_data.data.proofs {
             migration_data.proofs.push(proof);
         }
-
-        // ft_total_supply
+        
         // storage_balance_of
 
-        std::fs::write(
-            output,
-            migration_data.try_to_vec().expect("Failed serialize"),
-        )
-        .expect("Failed save migration data");
+        migration_data
+            .try_to_vec()
+            .and_then(|data| std::fs::write(output, data))
+            .map_err(|e| anyhow::anyhow!("Failed save migration data, {e}"))
+
 
         println!("Proofs: {:?}", migration_data.proofs.len());
         println!("Accounts: {:?}", migration_data.accounts.len());
