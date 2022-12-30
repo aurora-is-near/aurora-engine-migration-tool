@@ -1,7 +1,7 @@
-use crate::rpc::RPC;
+use crate::rpc::{REQUEST_TIMEOUT, RPC};
 use aurora_engine_migration_tool::{FungibleToken, StateData};
 use borsh::{BorshDeserialize, BorshSerialize};
-use near_sdk::json_types::U128;
+use near_sdk::json_types::{U128, U64};
 use near_sdk::{AccountId, Balance, StorageUsage};
 use serde_json::json;
 use std::collections::HashMap;
@@ -263,6 +263,16 @@ impl Migration {
         };
 
         let rpc = RPC::new().await?;
+
+        let data = rpc
+            .request_view(
+                AURORA_CONTRACT.to_string(),
+                "get_accounts_counter".to_string(),
+                vec![],
+            )
+            .await?;
+        migration_data.accounts_counter = U64::try_from_slice(&data).unwrap().0;
+
         for account in indexer_data.data.accounts {
             let args = json!({ "account_id": account })
                 .to_string()
@@ -282,8 +292,12 @@ impl Migration {
             migration_data
                 .accounts
                 .insert(account_id, NEP141Wei::new(balance.0));
+            tokio::time::sleep(REQUEST_TIMEOUT).await;
         }
-        println!("Accounts: {:?}", migration_data.accounts.len());
+
+        for proof in indexer_data.data.proofs {
+            migration_data.proofs.push(proof);
+        }
 
         // get_accounts_counter
         // ft_total_supply
@@ -295,6 +309,9 @@ impl Migration {
         )
         .expect("Failed save migration data");
 
+        println!("Proofs: {:?}", migration_data.proofs.len());
+        println!("Accounts: {:?}", migration_data.accounts.len());
+        println!("Accounts counter: {:?}", migration_data.accounts_counter);
         Ok(())
     }
 }
