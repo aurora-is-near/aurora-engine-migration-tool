@@ -273,6 +273,16 @@ impl Migration {
             .await?;
         migration_data.accounts_counter = U64::try_from_slice(&data).unwrap().0;
 
+        let data = rpc
+            .request_view(
+                AURORA_CONTRACT.to_string(),
+                "ft_total_supply".to_string(),
+                vec![],
+            )
+            .await?;
+        let total_supply: U128 = serde_json::from_slice(&data).unwrap();
+        migration_data.contract_data.total_eth_supply_on_near = NEP141Wei::new(total_supply.0);
+
         for account in indexer_data.data.accounts {
             let args = json!({ "account_id": account })
                 .to_string()
@@ -299,7 +309,6 @@ impl Migration {
             migration_data.proofs.push(proof);
         }
 
-        // get_accounts_counter
         // ft_total_supply
         // storage_balance_of
 
@@ -312,6 +321,10 @@ impl Migration {
         println!("Proofs: {:?}", migration_data.proofs.len());
         println!("Accounts: {:?}", migration_data.accounts.len());
         println!("Accounts counter: {:?}", migration_data.accounts_counter);
+        println!(
+            "Total supply: {:?}",
+            migration_data.contract_data.total_eth_supply_on_near
+        );
         Ok(())
     }
 }
