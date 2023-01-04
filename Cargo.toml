@@ -13,11 +13,11 @@ publish = false
 autobenches = false
 
 [dependencies]
-aurora-engine-types = { git = "https://github.com/aurora-is-near/aurora-engine.git", rev = "904010fa86199a848d3709272d36548daf24359e", default-features = false }
+aurora-engine-types = { git = "https://github.com/aurora-is-near/aurora-engine.git", tag = "2.8.1", default-features = false }
 serde = "1"
 serde_json = "1"
 serde_derive = "1"
-base64 = "0.13"
+base64 = "0.20"
 borsh =  "0.9.3"
 near-jsonrpc-client = "0.4.1"
 near-jsonrpc-primitives = "0.15.0"
@@ -29,6 +29,7 @@ clap = { version = "4.0", features = ["cargo"] }
 near-crypto = "0.15"
 
 [features]
+default = ["mainnet"]
 mainnet = ["log"]
 testnet = ["log"]
 mainnet-archival = ["log"]
