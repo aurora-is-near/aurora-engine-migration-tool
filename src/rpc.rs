@@ -85,6 +85,7 @@ pub struct IndexedData {
 
 impl Client {
     /// Init RPC with final (latest) flock height
+    #[must_use]
     pub fn new() -> Self {
         Self {
             // Init ner-rpc client
@@ -459,6 +460,12 @@ impl Client {
         } else {
             anyhow::bail!(CommitTxError::View)
         }
+    }
+}
+
+impl Default for Client {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
