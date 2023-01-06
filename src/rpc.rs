@@ -124,10 +124,12 @@ impl Client {
             .call(methods::block::RpcBlockRequest { block_reference })
             .await
             .map_err(|e| {
-                print_log("Failed get block");
+                let mut msg = "Failed get block".to_string();
                 if let BlockKind::Height(height) = bloch_kind {
                     self.unresolved_blocks.insert(height);
+                    msg = format!("{}: {:?}", msg.clone(), height);
                 }
+                print_log(&msg);
                 e
             })?;
 

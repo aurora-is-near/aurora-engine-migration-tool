@@ -274,11 +274,18 @@ impl Migration {
         let total_supply: U128 = serde_json::from_slice(&data).unwrap();
         migration_data.contract_data.total_eth_supply_on_near = NEP141Wei::new(total_supply.0);
 
+        let args = json!({ "account_id": crate::rpc::AURORA_CONTRACT })
+            .to_string()
+            .as_bytes()
+            .to_vec();
         let data = rpc
-            .request_view(AURORA_CONTRACT, "storage_balance_of".to_string(), vec![])
+            .request_view(AURORA_CONTRACT, "storage_balance_of".to_string(), args)
             .await?;
-        migration_data.contract_data.account_storage_usage = serde_json::from_slice(&data).unwrap();
 
+        let x: U64 = serde_json::from_slice(&data).unwrap();
+
+        migration_data.contract_data.account_storage_usage = serde_json::from_slice(&data).unwrap();
+        println!("#6");
         for account in indexer_data.data.accounts {
             let args = json!({ "account_id": account })
                 .to_string()
