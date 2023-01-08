@@ -11,7 +11,7 @@ use near_sdk::json_types::U128;
 use std::collections::HashSet;
 use std::time::Duration;
 
-use self::error::CommitTxError;
+use self::error::CommitTx;
 
 #[cfg(feature = "mainnet")]
 const NEAR_RPC_ADDRESS: &str = near_jsonrpc_client::NEAR_MAINNET_RPC_URL;
@@ -127,7 +127,7 @@ impl Client {
                 let mut msg = "Failed get block".to_string();
                 if let BlockKind::Height(height) = bloch_kind {
                     self.unresolved_blocks.insert(height);
-                    msg = format!("{}: {:?}", msg.clone(), height);
+                    msg = format!("{}: {:?}", msg, height);
                 }
                 print_log(&msg);
                 e
@@ -381,7 +381,7 @@ impl Client {
         // Get access key nonce
         let current_nonce = match access_key_query_response.kind {
             QueryResponseKind::AccessKey(access_key) => access_key.nonce,
-            _ => Err(CommitTxError::AccessKey)?,
+            _ => Err(CommitTx::AccessKey)?,
         };
 
         // Prepare transaction to commit
@@ -411,16 +411,16 @@ impl Client {
                 .client
                 .call(&request)
                 .await
-                .map_err(|err| CommitTxError::Commit(format!("{:?}", err)));
+                .map_err(|err| CommitTx::Commit(format!("{:?}", err)));
             // Check response and set errors if it needs
             if let Ok(tx_res) = res {
                 // If success - check response status
                 match tx_res.status {
                     FinalExecutionStatus::SuccessValue(_) => return Ok(()),
                     FinalExecutionStatus::Failure(err) => {
-                        res = Err(CommitTxError::Status(format!("{:?}", err)));
+                        res = Err(CommitTx::Status(format!("{:?}", err)));
                     }
-                    _ => res = Err(CommitTxError::Status("Other".to_string())),
+                    _ => res = Err(CommitTx::Status("Other".to_string())),
                 }
             }
 
@@ -460,7 +460,7 @@ impl Client {
         if let QueryResponseKind::CallResult(result) = response.kind {
             Ok(result.result)
         } else {
-            anyhow::bail!(CommitTxError::View)
+            anyhow::bail!(CommitTx::View)
         }
     }
 }
@@ -480,20 +480,20 @@ fn print_log(msg: &str) {
 
 mod error {
     #[derive(Debug)]
-    pub enum CommitTxError {
+    pub enum CommitTx {
         AccessKey,
         Commit(String),
         View,
         Status(String),
     }
 
-    impl std::error::Error for CommitTxError {
+    impl std::error::Error for CommitTx {
         fn description(&self) -> &str {
             Box::leak(self.to_string().into_boxed_str())
         }
     }
 
-    impl std::fmt::Display for CommitTxError {
+    impl std::fmt::Display for CommitTx {
         fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
             match self {
                 Self::AccessKey => write!(f, "ERR_FAILED_GET_ACCESS_KEY"),
