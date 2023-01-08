@@ -256,6 +256,7 @@ impl Migration {
             contract_data: FungibleToken {
                 total_eth_supply_on_near: NEP141Wei::new(0),
                 total_eth_supply_on_aurora: NEP141Wei::new(0),
+                // This value impossible to request from the contract
                 account_storage_usage: 0,
             },
             accounts: HashMap::new(),
@@ -274,18 +275,6 @@ impl Migration {
         let total_supply: U128 = serde_json::from_slice(&data).unwrap();
         migration_data.contract_data.total_eth_supply_on_near = NEP141Wei::new(total_supply.0);
 
-        let args = json!({ "account_id": crate::rpc::AURORA_CONTRACT })
-            .to_string()
-            .as_bytes()
-            .to_vec();
-        let data = rpc
-            .request_view(AURORA_CONTRACT, "storage_balance_of".to_string(), args)
-            .await?;
-
-        let x: U64 = serde_json::from_slice(&data).unwrap();
-
-        migration_data.contract_data.account_storage_usage = serde_json::from_slice(&data).unwrap();
-        println!("#6");
         for account in indexer_data.data.accounts {
             let args = json!({ "account_id": account })
                 .to_string()
@@ -313,7 +302,10 @@ impl Migration {
         println!("Accounts counter: {:?}", migration_data.accounts_counter);
         println!(
             "Total supply: {:?}",
-            migration_data.contract_data.total_eth_supply_on_near
+            migration_data
+                .contract_data
+                .total_eth_supply_on_near
+                .as_u128()
         );
 
         migration_data
