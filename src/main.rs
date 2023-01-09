@@ -8,6 +8,9 @@ mod migration;
 mod parser;
 pub mod rpc;
 
+#[cfg(test)]
+mod tests;
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let matches = command!()

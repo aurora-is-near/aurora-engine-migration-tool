@@ -94,6 +94,14 @@ impl Client {
         }
     }
 
+    #[cfg(test)]
+    pub fn new_with_url(url: &str) -> Self {
+        Self {
+            client: JsonRpcClient::connect(url),
+            unresolved_blocks: HashSet::new(),
+        }
+    }
+
     /// Set missed blocks for RPC runner
     pub fn set_missed_blocks(&mut self, missed_blocks: HashSet<BlockHeight>) {
         self.unresolved_blocks = missed_blocks;
@@ -102,7 +110,7 @@ impl Client {
     /// Wrap rpc-client calls.
     /// All calls should have timeout, it's related to
     /// restrictions of request count per minute: 600 per/min
-    pub async fn call<M>(&self, method: M) -> MethodCallResult<M::Response, M::Error>
+    pub async fn call<M: Send>(&self, method: M) -> MethodCallResult<M::Response, M::Error>
     where
         M: methods::RpcMethod,
     {

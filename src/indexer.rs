@@ -22,6 +22,7 @@ pub struct IndexerData {
 
 pub struct Indexer {
     pub data: Arc<Mutex<IndexerData>>,
+    pub client: Client,
     pub data_file: PathBuf,
     pub last_saved_time: Instant,
     pub fetch_history: bool,
@@ -45,6 +46,32 @@ impl Indexer {
 
         Ok(Self {
             data: Arc::new(Mutex::new(data)),
+            client: Client::new(),
+            data_file: data_file.as_ref().to_path_buf(),
+            last_saved_time: Instant::now(),
+            fetch_history,
+            force_index_from_block: block_height,
+        })
+    }
+
+    #[cfg(test)]
+    pub fn new_with_url<P: AsRef<Path>>(
+        data_file: P,
+        fetch_history: bool,
+        block_height: Option<BlockHeight>,
+        url: &str,
+    ) -> anyhow::Result<Self> {
+        // If file doesn't exist just return default data
+        let data = std::fs::read(&data_file).unwrap_or_default();
+        let mut data = IndexerData::try_from_slice(&data).unwrap_or_default();
+
+        if let Some(height) = block_height {
+            data.last_block = height - 1;
+        }
+
+        Ok(Self {
+            data: Arc::new(Mutex::new(data)),
+            client: Client::new_with_url(url),
             data_file: data_file.as_ref().to_path_buf(),
             last_saved_time: Instant::now(),
             fetch_history,
@@ -108,17 +135,16 @@ impl Indexer {
 
     /// Run indexing
     pub async fn run(&mut self) -> anyhow::Result<()> {
-        let mut client = Client::new();
         let missed_blocks = self.data.lock().unwrap().missed_blocks.clone();
-        client.set_missed_blocks(missed_blocks);
+        self.client.set_missed_blocks(missed_blocks);
         let last_block = self.data.lock().unwrap().last_block;
         println!("Starting height: {}", last_block);
         let mut handle = None;
 
         loop {
             tokio::select! {
-                block = client.get_block(BlockKind::Latest) => if let Ok(block) = block {
-                    handle = self.handle_block(block, &mut client).await;
+                block = self.client.get_block(BlockKind::Latest) => if let Ok(block) = block {
+                    handle = self.handle_block(block).await;
                 },
                 _ = tokio::signal::ctrl_c() => break,
                 else => break,
@@ -133,10 +159,31 @@ impl Indexer {
         }
     }
 
+    #[cfg(test)]
+    pub async fn run_n_blocks(&mut self, num_blocks: u64) -> anyhow::Result<()> {
+        let missed_blocks = self.data.lock().unwrap().missed_blocks.clone();
+        self.client.set_missed_blocks(missed_blocks);
+        let last_block = self.data.lock().unwrap().last_block;
+        println!("Starting height: {}", last_block);
+        let mut handle = None;
+
+        for _ in 0..num_blocks {
+            if let Ok(block) = self.client.get_block(BlockKind::Latest).await {
+                handle = self.handle_block(block).await;
+            }
+        }
+
+        // Wait for data saving
+        if let Some(handle) = handle {
+            handle.await.map_err(Into::into)
+        } else {
+            Ok(())
+        }
+    }
+
     async fn handle_block(
         &mut self,
         block: (BlockHeight, Vec<ChunkHeaderView>),
-        client: &mut Client,
     ) -> Option<tokio::task::JoinHandle<()>> {
         let last_block = self.data.lock().unwrap().last_block;
         // Skip, if block already exists
@@ -146,7 +193,11 @@ impl Indexer {
         // Check, do we need fetch history data or force check from some block height
         let (height, chunks) = if self.force_index_from_block.is_some() || self.fetch_history {
             if block.0 - last_block > 0 {
-                if let Ok(block) = client.get_block(BlockKind::Height(last_block + 1)).await {
+                if let Ok(block) = self
+                    .client
+                    .get_block(BlockKind::Height(last_block + 1))
+                    .await
+                {
                     block
                 } else {
                     // If block not found do not fail, just increment height
@@ -163,11 +214,11 @@ impl Indexer {
         print!("\rHeight: {:?}", height);
         std::io::stdout().flush().expect("Flush failed");
 
-        let indexed_data = client.get_chunk_indexed_data(chunks, height).await;
+        let indexed_data = self.client.get_chunk_indexed_data(chunks, height).await;
         self.set_indexed_data(
             height,
             indexed_data,
-            client.unresolved_blocks.clone(),
+            self.client.unresolved_blocks.clone(),
             block.0,
         );
 

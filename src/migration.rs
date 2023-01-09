@@ -65,6 +65,28 @@ impl Migration {
         })
     }
 
+    #[allow(dead_code)]
+    #[cfg(test)]
+    pub fn new_with_url<P: AsRef<Path>>(
+        data_file: P,
+        signer_account_id: String,
+        signer_secret_key: String,
+        url: &str,
+    ) -> anyhow::Result<Self> {
+        let data = std::fs::read(data_file).unwrap_or_default();
+        let data: StateData = StateData::try_from_slice(&data)?;
+
+        Ok(Self {
+            client: Client::new_with_url(url),
+            data,
+            config: MigrationConfig {
+                signer_account_id: signer_account_id.clone(),
+                signer_secret_key,
+                contract: signer_account_id,
+            },
+        })
+    }
+
     /// Commit migration data as transaction call
     async fn commit_migration(
         &self,
@@ -240,9 +262,27 @@ impl Migration {
         Ok(())
     }
 
-    /// Prepare indexed data for migration from Indexer data
-    /// and store to file
-    pub async fn prepare_indexed<P: AsRef<Path>>(input: P, output: P) -> anyhow::Result<()> {
+    /// Prepare indexed data for migration from Indexer data and store to file.
+    pub async fn prepare_indexed<P: AsRef<Path> + Send>(input: P, output: P) -> anyhow::Result<()> {
+        let client = Client::new();
+        Self::prepare_indexed_with_client(input, output, client).await
+    }
+
+    #[cfg(test)]
+    pub async fn prepare_indexed_with_url<P: AsRef<Path> + Send>(
+        input: P,
+        output: P,
+        url: &str,
+    ) -> anyhow::Result<()> {
+        let client = Client::new_with_url(url);
+        Self::prepare_indexed_with_client(input, output, client).await
+    }
+
+    async fn prepare_indexed_with_client<P: AsRef<Path> + Send>(
+        input: P,
+        output: P,
+        client: Client,
+    ) -> anyhow::Result<()> {
         use crate::indexer::IndexerData;
         use crate::rpc::AURORA_CONTRACT;
 
@@ -250,7 +290,6 @@ impl Migration {
             .map_err(|e| anyhow::anyhow!("Failed read indexer data file, {e}"))?;
         let indexer_data: IndexerData = IndexerData::try_from_slice(&data)
             .map_err(|e| anyhow::anyhow!("Failed deserialize indexed data, {e}"))?;
-        let rpc = Client::new();
 
         let mut migration_data = StateData {
             contract_data: FungibleToken {
@@ -263,18 +302,18 @@ impl Migration {
             proofs: vec![],
         };
 
-        let data = rpc
+        let data = client
             .request_view(AURORA_CONTRACT, "get_accounts_counter".to_string(), vec![])
             .await?;
         migration_data.accounts_counter = U64::try_from_slice(&data).unwrap().0;
 
-        let data = rpc
+        let data = client
             .request_view(AURORA_CONTRACT, "ft_total_supply".to_string(), vec![])
             .await?;
         let total_supply: U128 = serde_json::from_slice(&data).unwrap();
         migration_data.contract_data.total_eth_supply_on_near = NEP141Wei::new(total_supply.0);
 
-        let data = rpc
+        let data = client
             .request_view(AURORA_CONTRACT, "storage_balance_of".to_string(), vec![])
             .await?;
         migration_data.contract_data.account_storage_usage = serde_json::from_slice(&data).unwrap();
@@ -285,7 +324,7 @@ impl Migration {
                 .as_bytes()
                 .to_vec();
 
-            let data = rpc
+            let data = client
                 .request_view(AURORA_CONTRACT, "ft_balance_of".to_string(), args)
                 .await?;
             let balance: U128 =
