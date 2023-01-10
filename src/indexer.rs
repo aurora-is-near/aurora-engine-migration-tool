@@ -187,6 +187,7 @@ impl Indexer {
         }
     }
 
+    /// Handle fetching blocks
     async fn handle_block(
         &mut self,
         block: (BlockHeight, Vec<ChunkHeaderView>),
