@@ -24,7 +24,7 @@ near-jsonrpc-primitives = "0.15.0"
 near-primitives = "0.15.0"
 near-sdk = "4.1"
 anyhow = "1.0"
-tokio = { version = "1.14", features = ["full"] }
+tokio = { version = "1.23", features = ["full"] }
 clap = { version = "4.0", features = ["cargo"] }
 near-crypto = "0.15"
 
