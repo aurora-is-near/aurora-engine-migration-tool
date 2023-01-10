@@ -1,11 +1,13 @@
-use crate::rpc::RPC;
+use crate::rpc::{Client, REQUEST_TIMEOUT};
 use aurora_engine_migration_tool::{FungibleToken, StateData};
-use aurora_engine_types::types::NEP141Wei;
+use aurora_engine_types::{account_id::AccountId, types::NEP141Wei};
 use borsh::{BorshDeserialize, BorshSerialize};
-use near_sdk::{AccountId, Balance, StorageUsage};
+use near_sdk::json_types::{U128, U64};
+use near_sdk::{Balance, StorageUsage};
+use serde_json::json;
 use std::collections::HashMap;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::Path;
 
 const MIGRATION_METHOD: &str = "migrate";
 const MIGRATION_CHECK_METHOD: &str = "check_migration_correctness";
@@ -18,12 +20,12 @@ pub struct MigrationConfig {
 }
 
 pub struct Migration {
-    pub rpc: RPC,
+    pub client: Client,
     pub data: StateData,
     pub config: MigrationConfig,
 }
 
-#[derive(BorshDeserialize, BorshSerialize)]
+#[derive(Debug, BorshDeserialize, BorshSerialize)]
 pub struct MigrationInputData {
     pub accounts: HashMap<AccountId, Balance>,
     pub total_supply: Option<Balance>,
@@ -44,16 +46,16 @@ pub enum MigrationCheckResult {
 }
 
 impl Migration {
-    pub async fn new(
-        data_file: &PathBuf,
+    pub fn new<P: AsRef<Path>>(
+        data_file: P,
         signer_account_id: String,
         signer_secret_key: String,
     ) -> anyhow::Result<Self> {
         let data = std::fs::read(data_file).unwrap_or_default();
-        let data: StateData = StateData::try_from_slice(&data[..]).expect("Failed parse data");
+        let data: StateData = StateData::try_from_slice(&data)?;
 
         Ok(Self {
-            rpc: RPC::new().await?,
+            client: Client::new(),
             data,
             config: MigrationConfig {
                 signer_account_id: signer_account_id.clone(),
@@ -70,13 +72,13 @@ impl Migration {
         msg: &str,
         counter: usize,
     ) -> anyhow::Result<()> {
-        self.rpc
+        self.client
             .commit_tx(
                 self.config.signer_account_id.clone(),
                 self.config.signer_secret_key.clone(),
                 self.config.contract.clone(),
                 MIGRATION_METHOD.to_string(),
-                migration_data.clone(),
+                migration_data,
             )
             .await?;
         print!("\r{msg}: {counter}");
@@ -92,23 +94,23 @@ impl Migration {
         counter: usize,
     ) -> anyhow::Result<()> {
         let res = self
-            .rpc
+            .client
             .request_view(
-                self.config.contract.clone(),
+                &self.config.contract,
                 MIGRATION_CHECK_METHOD.to_string(),
                 migration_data,
             )
             .await?;
-        let correctness = MigrationCheckResult::try_from_slice(&res[..]).unwrap();
+        let correctness = MigrationCheckResult::try_from_slice(&res).unwrap();
         match correctness {
             MigrationCheckResult::Proof(missed) => {
-                println!("{msg}: {counter} [Missed: {:?}]", missed.len())
+                println!("{msg}: {counter} [Missed: {:?}]", missed.len());
             }
             MigrationCheckResult::AccountNotExist(missed) => {
-                println!("{msg}: {counter} [Missed: {:?}]", missed.len())
+                println!("{msg}: {counter} [Missed: {:?}]", missed.len());
             }
             MigrationCheckResult::AccountAmount(missed) => {
-                println!("{msg}: {counter} [Missed: {:?}]", missed.len())
+                println!("{msg}: {counter} [Missed: {:?}]", missed.len());
             }
             MigrationCheckResult::Success => {
                 print!("\r{msg}: {counter} [{:?}]", correctness);
@@ -116,13 +118,13 @@ impl Migration {
             }
             _ => {
                 if let MigrationCheckResult::TotalSupply(_) = correctness {
-                    println!("{msg} [Missed field: {:?}]", correctness)
+                    println!("{msg} [Missed field: {:?}]", correctness);
                 }
                 if let MigrationCheckResult::StorageUsage(_) = correctness {
-                    println!("{msg} [Missed field: {:?}]", correctness)
+                    println!("{msg} [Missed field: {:?}]", correctness);
                 }
                 if let MigrationCheckResult::StatisticsCounter(_) = correctness {
-                    println!("{msg} [Missed field: {:?}]", correctness)
+                    println!("{msg} [Missed field: {:?}]", correctness);
                 }
             }
         }
@@ -154,8 +156,7 @@ impl Migration {
                 statistics_aurora_accounts_counter: None,
                 used_proofs: proofs,
             }
-            .try_to_vec()
-            .expect("Failed serialize");
+            .try_to_vec()?;
             reproducible_data_for_proofs.push((migration_data.clone(), proofs_count));
 
             self.commit_migration(migration_data, "Proofs", proofs_count)
@@ -163,27 +164,28 @@ impl Migration {
 
             if i + limit >= self.data.proofs.len() {
                 break;
-            } else {
-                i += limit;
             }
+
+            i += limit;
         }
         assert_eq!(proofs_count, self.data.proofs.len());
+        println!();
 
         // Accounts migration
-        println!();
         let mut accounts: HashMap<AccountId, Balance> = HashMap::new();
         let mut accounts_count = 0;
         let mut reproducible_data_for_accounts: Vec<(Vec<u8>, usize)> = vec![];
+
         for (i, (account, amount)) in self.data.accounts.iter().enumerate() {
-            let account = AccountId::try_from(account.to_string()).unwrap();
             accounts.insert(account.clone(), amount.as_u128());
+
             if accounts.len() < limit && i < self.data.accounts.len() - 1 {
                 continue;
             }
             accounts_count += &accounts.len();
 
             let migration_data = MigrationInputData {
-                accounts,
+                accounts: accounts.clone(),
                 total_supply: None,
                 account_storage_usage: None,
                 statistics_aurora_accounts_counter: None,
@@ -197,7 +199,7 @@ impl Migration {
                 .await?;
 
             // Clear
-            accounts = HashMap::new();
+            accounts.clear();
         }
         assert_eq!(self.data.accounts.len(), accounts_count);
 
@@ -220,7 +222,7 @@ impl Migration {
         // Checking the correctness and integrity of data, regardless of
         // the migration process
 
-        println!();
+        println!("\n\n[Check correctness]");
         for (migration_data, counter) in reproducible_data_for_proofs {
             self.check_migration("Proofs", migration_data, counter)
                 .await?;
@@ -236,45 +238,81 @@ impl Migration {
         self.check_migration("Contract data:", contract_migration_data, 1)
             .await?;
 
+        println!();
         Ok(())
     }
 
     /// Prepare indexed data for migration from Indexer data
     /// and store to file
-    pub async fn prepare_indexed(input: &PathBuf, output: &PathBuf) -> anyhow::Result<()> {
+    pub async fn prepare_indexed<P: AsRef<Path>>(input: P, output: P) -> anyhow::Result<()> {
         use crate::indexer::IndexerData;
         use crate::rpc::AURORA_CONTRACT;
 
-        let data = std::fs::read(input).expect("Failed read indexer data file");
-        let indexer_data: IndexerData =
-            IndexerData::try_from_slice(&data[..]).expect("Failed deserialize indexed data");
+        let data = std::fs::read(input)
+            .map_err(|e| anyhow::anyhow!("Failed read indexer data file, {e}"))?;
+        let indexer_data: IndexerData = IndexerData::try_from_slice(&data)
+            .map_err(|e| anyhow::anyhow!("Failed deserialize indexed data, {e}"))?;
+        let rpc = Client::new();
 
-        let rpc = RPC::new().await?;
-        for _account in indexer_data.data.accounts {
-            rpc.request_view(
-                AURORA_CONTRACT.to_string(),
-                "get_account".to_string(),
-                vec![],
-            )
-            .await?;
-        }
-
-        let migration_data = StateData {
+        let mut migration_data = StateData {
             contract_data: FungibleToken {
                 total_eth_supply_on_near: NEP141Wei::new(0),
                 total_eth_supply_on_aurora: NEP141Wei::new(0),
+                // This value impossible to request from the contract
                 account_storage_usage: 0,
             },
             accounts: HashMap::new(),
             accounts_counter: 0,
             proofs: vec![],
         };
-        std::fs::write(
-            output,
-            migration_data.try_to_vec().expect("Failed serialize"),
-        )
-        .expect("Failed save migration data");
 
-        Ok(())
+        let data = rpc
+            .request_view(AURORA_CONTRACT, "get_accounts_counter".to_string(), vec![])
+            .await?;
+        migration_data.accounts_counter = U64::try_from_slice(&data).unwrap().0;
+
+        let data = rpc
+            .request_view(AURORA_CONTRACT, "ft_total_supply".to_string(), vec![])
+            .await?;
+        let total_supply: U128 = serde_json::from_slice(&data).unwrap();
+        migration_data.contract_data.total_eth_supply_on_near = NEP141Wei::new(total_supply.0);
+
+        for account in indexer_data.data.accounts {
+            let args = json!({ "account_id": account })
+                .to_string()
+                .as_bytes()
+                .to_vec();
+
+            let data = rpc
+                .request_view(AURORA_CONTRACT, "ft_balance_of".to_string(), args)
+                .await?;
+            let balance: U128 =
+                serde_json::from_slice(&data[..]).expect("Failed deserialize account balance");
+            let account_id = AccountId::new(account.as_str()).expect("Failed deserialize account");
+            migration_data
+                .accounts
+                .insert(account_id, NEP141Wei::new(balance.0));
+            tokio::time::sleep(REQUEST_TIMEOUT).await;
+        }
+
+        for proof in indexer_data.data.proofs {
+            migration_data.proofs.push(proof);
+        }
+
+        println!("Proofs: {:?}", migration_data.proofs.len());
+        println!("Accounts: {:?}", migration_data.accounts.len());
+        println!("Accounts counter: {:?}", migration_data.accounts_counter);
+        println!(
+            "Total supply: {:?}",
+            migration_data
+                .contract_data
+                .total_eth_supply_on_near
+                .as_u128()
+        );
+
+        migration_data
+            .try_to_vec()
+            .and_then(|data| std::fs::write(output, data))
+            .map_err(|e| anyhow::anyhow!("Failed save migration data, {e}"))
     }
 }

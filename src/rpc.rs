@@ -11,7 +11,7 @@ use near_sdk::json_types::U128;
 use std::collections::HashSet;
 use std::time::Duration;
 
-use self::error::CommitTxError;
+use self::error::CommitTx;
 
 #[cfg(feature = "mainnet")]
 const NEAR_RPC_ADDRESS: &str = near_jsonrpc_client::NEAR_MAINNET_RPC_URL;
@@ -23,9 +23,9 @@ const NEAR_RPC_ADDRESS: &str = near_jsonrpc_client::NEAR_MAINNET_ARCHIVAL_RPC_UR
 const NEAR_RPC_ADDRESS: &str = near_jsonrpc_client::NEAR_TESTNET_RPC_URL;
 
 /// NEAR-RPC has limits: 600 req/sec, so we need timeout per requests
-const REQUEST_TIMEOUT: Duration = Duration::from_millis(90);
+pub const REQUEST_TIMEOUT: Duration = Duration::from_millis(90);
 
-/// Gas for commit tx to blockchain (300 TGas)
+/// Gas for commit tx to blockchain (300 `TGas`)
 const GAS_FOR_COMMIT_TX: u64 = 300_000_000_000_000;
 
 /// Transactions receiver
@@ -43,10 +43,10 @@ const ACTION_METHODS: &[&str] = &[
     "finish_deposit",
 ];
 
-pub struct RPC {
+pub struct Client {
     /// NEAR-rpc client
     pub client: JsonRpcClient,
-    /// One possile reason: https://stackoverflow.com/a/72230096
+    /// One possible reason: https://stackoverflow.com/a/72230096
     pub unresolved_blocks: HashSet<BlockHeight>,
 }
 
@@ -83,14 +83,15 @@ pub struct IndexedData {
     pub logs: Vec<IndexedResultLog>,
 }
 
-impl RPC {
+impl Client {
     /// Init RPC with final (latest) flock height
-    pub async fn new() -> anyhow::Result<Self> {
-        Ok(Self {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
             // Init ner-rpc client
             client: JsonRpcClient::connect(NEAR_RPC_ADDRESS),
             unresolved_blocks: HashSet::new(),
-        })
+        }
     }
 
     /// Set missed blocks for RPC runner
@@ -115,58 +116,52 @@ impl RPC {
         bloch_kind: BlockKind,
     ) -> anyhow::Result<(BlockHeight, Vec<ChunkHeaderView>)> {
         let block_reference = if let BlockKind::Height(height) = bloch_kind {
-            near_primitives::types::BlockReference::BlockId(
-                near_primitives::types::BlockId::Height(height),
-            )
+            BlockReference::BlockId(near_primitives::types::BlockId::Height(height))
         } else {
-            near_primitives::types::BlockReference::Finality(
-                near_primitives::types::Finality::Final,
-            )
+            BlockReference::Finality(near_primitives::types::Finality::Final)
         };
         let block = self
             .call(methods::block::RpcBlockRequest { block_reference })
             .await
             .map_err(|e| {
-                print_log("Failed get block");
+                let mut msg = "Failed get block".to_string();
                 if let BlockKind::Height(height) = bloch_kind {
                     self.unresolved_blocks.insert(height);
+                    msg = format!("{}: {:?}", msg, height);
                 }
+                print_log(&msg);
                 e
             })?;
+
         Ok((block.header.height, block.chunks))
     }
 
     /// Get action output for chunk transaction (including receipt output)
     /// It includes: Accounts, Proof keys
     pub fn get_actions_data(&mut self, actions: Vec<ActionView>) -> ActionResult {
-        let mut result = ActionResult {
-            accounts: vec![],
-            proofs: vec![],
-            is_action_found: false,
-            log: vec![],
-        };
+        let mut result = ActionResult::default();
+
         for action in actions {
             // Check action method and filter it
-            let (method_name, args) = match action {
-                ActionView::FunctionCall {
-                    method_name, args, ..
-                } => (method_name, args),
-                _ => continue,
-            };
-            if !ACTION_METHODS.contains(&method_name.as_str()) {
-                continue;
-            }
+            if let ActionView::FunctionCall {
+                method_name, args, ..
+            } = action
+            {
+                if ACTION_METHODS.contains(&method_name.as_str()) {
+                    let (accounts, proof) = self.parse_action_argument(&method_name, &args);
 
-            let mut res = self.parse_action_argument(method_name.clone(), args);
-            result.is_action_found = true;
-            result.log.push(ActionResultLog {
-                accounts: res.0.clone(),
-                proof: res.1.clone().unwrap_or_default(),
-                method: method_name,
-            });
-            result.accounts.append(&mut res.0);
-            if let Some(proof) = res.1 {
-                result.proofs.push(proof);
+                    result.is_action_found = true;
+                    result.log.push(ActionResultLog {
+                        accounts: accounts.clone(),
+                        proof: proof.clone().unwrap_or_default(),
+                        method: method_name,
+                    });
+                    result.accounts.extend(accounts);
+
+                    if let Some(proof) = proof {
+                        result.proofs.push(proof);
+                    }
+                }
             }
         }
 
@@ -174,14 +169,15 @@ impl RPC {
     }
 
     /// Parse action arguments and return accounts and proof keys
+    #[must_use]
     pub fn parse_action_argument(
         &self,
-        method: String,
-        args: Vec<u8>,
+        method: &str,
+        args: &[u8],
     ) -> (Vec<AccountId>, Option<String>) {
         use serde::Deserialize;
 
-        match method.as_str() {
+        match method {
             "ft_transfer" => {
                 #[derive(Debug, Deserialize)]
                 pub struct FtTransferArgs {
@@ -189,7 +185,7 @@ impl RPC {
                     pub amount: U128,
                     pub memo: Option<String>,
                 }
-                if let Ok(res) = serde_json::from_slice::<FtTransferArgs>(&args[..]) {
+                if let Ok(res) = serde_json::from_slice::<FtTransferArgs>(args) {
                     print_log("ft_transfer");
                     (vec![res.receiver_id], None)
                 } else {
@@ -205,8 +201,7 @@ impl RPC {
                     pub memo: Option<String>,
                     pub msg: String,
                 }
-                let _ = serde_json::from_slice::<FtTransferCallArgs>(&args[..]).unwrap();
-                if let Ok(res) = serde_json::from_slice::<FtTransferCallArgs>(&args[..]) {
+                if let Ok(res) = serde_json::from_slice::<FtTransferCallArgs>(args) {
                     print_log("ft_transfer_call");
                     (vec![res.receiver_id], None)
                 } else {
@@ -228,7 +223,7 @@ impl RPC {
                     pub fee: u128,
                     pub msg: Option<Vec<u8>>,
                 }
-                if let Ok(res) = FinishDepositArgs::try_from_slice(&args[..]) {
+                if let Ok(res) = FinishDepositArgs::try_from_slice(args) {
                     print_log("finish_deposit");
                     (vec![res.new_owner_id, res.relayer_id], Some(res.proof_key))
                 } else {
@@ -386,7 +381,7 @@ impl RPC {
         // Get access key nonce
         let current_nonce = match access_key_query_response.kind {
             QueryResponseKind::AccessKey(access_key) => access_key.nonce,
-            _ => Err(CommitTxError::AccessKey)?,
+            _ => Err(CommitTx::AccessKey)?,
         };
 
         // Prepare transaction to commit
@@ -416,16 +411,16 @@ impl RPC {
                 .client
                 .call(&request)
                 .await
-                .map_err(|err| CommitTxError::Commit(format!("{:?}", err)));
+                .map_err(|err| CommitTx::Commit(format!("{:?}", err)));
             // Check response and set errors if it needs
             if let Ok(tx_res) = res {
                 // If success - check response status
                 match tx_res.status {
                     FinalExecutionStatus::SuccessValue(_) => return Ok(()),
                     FinalExecutionStatus::Failure(err) => {
-                        res = Err(CommitTxError::Status(format!("{:?}", err)))
+                        res = Err(CommitTx::Status(format!("{:?}", err)));
                     }
-                    _ => res = Err(CommitTxError::Status("Other".to_string())),
+                    _ => res = Err(CommitTx::Status("Other".to_string())),
                 }
             }
 
@@ -433,17 +428,20 @@ impl RPC {
             retry += 1;
             println!("\nRequest retry: {:?}", retry);
             // If all retries failed it's incident, just panic
-            if retry > RETRIES_COUNT {
-                panic!("Failed commit tx {:?} times: {:?}", RETRIES_COUNT, res);
-            }
+            assert!(
+                retry <= RETRIES_COUNT,
+                "Failed commit tx {:?} times: {:?}",
+                RETRIES_COUNT,
+                res
+            );
         }
     }
 
     /// Request view data for contract method.
-    /// Return error if wrong response type or failfViewed request
+    /// Return error if wrong response type or failViewed request
     pub async fn request_view(
         &self,
-        contract: String,
+        contract: &str,
         method: String,
         args: Vec<u8>,
     ) -> anyhow::Result<Vec<u8>> {
@@ -460,35 +458,42 @@ impl RPC {
         let response = self.client.call(request).await?;
         // Response should contain only CallResult, if something other - return error
         if let QueryResponseKind::CallResult(result) = response.kind {
-            return Ok(result.result);
+            Ok(result.result)
+        } else {
+            anyhow::bail!(CommitTx::View)
         }
-        Err(CommitTxError::View)?
+    }
+}
+
+impl Default for Client {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
 #[allow(dead_code)]
 fn print_log(msg: &str) {
     #[cfg(feature = "log")]
-    // Print witn space shift
-    println!(" {msg}")
+    // Print with space shift
+    println!(" {msg}");
 }
 
 mod error {
     #[derive(Debug)]
-    pub enum CommitTxError {
+    pub enum CommitTx {
         AccessKey,
         Commit(String),
         View,
         Status(String),
     }
 
-    impl std::error::Error for CommitTxError {
+    impl std::error::Error for CommitTx {
         fn description(&self) -> &str {
             Box::leak(self.to_string().into_boxed_str())
         }
     }
 
-    impl std::fmt::Display for CommitTxError {
+    impl std::fmt::Display for CommitTx {
         fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
             match self {
                 Self::AccessKey => write!(f, "ERR_FAILED_GET_ACCESS_KEY"),
