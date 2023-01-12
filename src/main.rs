@@ -88,22 +88,23 @@ async fn main() -> anyhow::Result<()> {
         Some(("parse", cmd)) => {
             let snapshot_json_file = cmd
                 .get_one::<PathBuf>("file")
-                .expect("Expected snapshot file");
+                .ok_or_else(|| anyhow::anyhow!("Expected snapshot file"))?;
             let output = cmd.get_one::<PathBuf>("output");
-            parser::parse(snapshot_json_file, output.cloned());
+            parser::parse(snapshot_json_file, output)?;
         }
         Some(("indexer", cmd)) => {
             let history = cmd.get_flag("history");
             let stat = cmd.get_flag("stat");
             let fullstat = cmd.get_flag("fullstat");
             let block = cmd.get_one::<u64>("block").copied();
-            let mut indexer = Indexer::new("data.borsh".into(), history, block);
+            let mut indexer = Indexer::new("data.borsh", history, block)?;
+
             if stat {
                 indexer.stats(false);
             } else if fullstat {
                 indexer.stats(true);
             } else {
-                indexer.run().await?
+                indexer.run().await?;
             }
         }
         Some(("migrate", cmd)) => {
@@ -114,8 +115,7 @@ async fn main() -> anyhow::Result<()> {
                 .expect("Expected account-id");
             let account_key = cmd.get_one::<String>("key").expect("Expected account-key");
 
-            Migration::new(data_file, account_id.clone(), account_key.clone())
-                .await?
+            Migration::new(data_file, account_id.clone(), account_key.clone())?
                 .run()
                 .await?;
         }
