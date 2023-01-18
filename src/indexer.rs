@@ -6,6 +6,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use tokio::signal::unix::SignalKind;
 use tokio::time::Instant;
 
 const SAVE_FILE_TIMEOUT: Duration = Duration::from_secs(60);
@@ -120,6 +121,31 @@ impl Indexer {
         data.missed_blocks = missed_blocks;
     }
 
+    fn shutdown_listener() -> tokio::sync::mpsc::Receiver<()> {
+        use tokio::signal;
+        async fn send_msg(tx: tokio::sync::mpsc::Sender<()>) {
+            println!("\n[Waiting shutdown]");
+            let _ = tx.send(()).await;
+        }
+
+        let (tx, rx) = tokio::sync::mpsc::channel(1);
+        let mut terminate = signal::unix::signal(SignalKind::terminate()).unwrap();
+        let mut interrupt = signal::unix::signal(SignalKind::interrupt()).unwrap();
+        let mut quit = signal::unix::signal(SignalKind::quit()).unwrap();
+        let mut tstp = signal::unix::signal(SignalKind::from_raw(libc::SIGTSTP)).unwrap();
+
+        tokio::spawn(async move {
+            tokio::select! {
+                _ = signal::ctrl_c() => send_msg(tx).await,
+                _ = terminate.recv() => send_msg(tx).await,
+                _ = interrupt.recv() => send_msg(tx).await,
+                _ = quit.recv() => send_msg(tx).await,
+                _ = tstp.recv() => send_msg(tx).await,
+            }
+        });
+        rx
+    }
+
     /// Run indexing
     pub async fn run(&mut self) -> anyhow::Result<()> {
         let mut client = Client::new();
@@ -128,17 +154,12 @@ impl Indexer {
         let last_block = self.data.lock().unwrap().last_block;
         println!("Starting height: {}", last_block);
         let mut handle = None;
-        let (tx, mut rx) = tokio::sync::mpsc::channel(1);
 
-        tokio::spawn(async move {
-            let _ = tokio::signal::ctrl_c().await;
-            let _ = tx.send(()).await;
-        });
-
+        let mut shutdown_stream = Self::shutdown_listener();
         loop {
             tokio::select! {
                 h = self.handle_block(&mut client) => handle = h,
-                _ = rx.recv() => break,
+                _ = shutdown_stream.recv() => break,
                 else => break,
             }
         }
@@ -154,16 +175,14 @@ impl Indexer {
     /// Handle fetching blocks
     async fn handle_block(&mut self, client: &mut Client) -> Option<tokio::task::JoinHandle<()>> {
         let last_block = self.data.lock().unwrap().last_block;
-        let (current_block, current_height) = if !self.force_blocks {
-            if let Ok(block) = client.get_block(BlockKind::Latest).await {
-                // Skip, if block already exists
-                if last_block >= block.0 {
-                    return None;
-                }
-                (Some(block.clone()), block.0)
-            } else {
-                (None, 0)
+        let (current_block, current_height) = if self.force_blocks {
+            (None, 0)
+        } else if let Ok(block) = client.get_block(BlockKind::Latest).await {
+            // Skip, if block already exists
+            if last_block >= block.0 {
+                return None;
             }
+            (Some(block.clone()), block.0)
         } else {
             (None, 0)
         };

@@ -61,6 +61,7 @@ dependencies = [
  "base64 0.13.1",
  "borsh",
  "clap",
+ "libc",
  "near-crypto 0.15.0",
  "near-jsonrpc-client",
  "near-jsonrpc-primitives",
