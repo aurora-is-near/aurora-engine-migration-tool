@@ -6,6 +6,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use tokio::signal::unix::SignalKind;
 use tokio::time::Instant;
 
 const SAVE_FILE_TIMEOUT: Duration = Duration::from_secs(60);
@@ -128,10 +129,13 @@ impl Indexer {
         let last_block = self.data.lock().unwrap().last_block;
         println!("Starting height: {}", last_block);
         let mut handle = None;
-        let (tx, mut rx) = tokio::sync::mpsc::channel(1);
+        let (tx, mut rx) = tokio::sync::mpsc::channel(2);
+        let mut term_stream = tokio::signal::unix::signal(SignalKind::terminate()).unwrap();
+        let mut itnrp_stream = tokio::signal::unix::signal(SignalKind::interrupt()).unwrap();
+        let mut quit_stream = tokio::signal::unix::signal(SignalKind::quit()).unwrap();
 
         tokio::spawn(async move {
-            let _ = tokio::signal::ctrl_c().await;
+            let _t = tokio::signal::ctrl_c().await;
             let _ = tx.send(()).await;
         });
 
@@ -139,6 +143,9 @@ impl Indexer {
             tokio::select! {
                 h = self.handle_block(&mut client) => handle = h,
                 _ = rx.recv() => break,
+                _ = term_stream.recv() => break,
+                _ = itnrp_stream.recv() => break,
+                _ = quit_stream.recv() => break,
                 else => break,
             }
         }
@@ -154,16 +161,14 @@ impl Indexer {
     /// Handle fetching blocks
     async fn handle_block(&mut self, client: &mut Client) -> Option<tokio::task::JoinHandle<()>> {
         let last_block = self.data.lock().unwrap().last_block;
-        let (current_block, current_height) = if !self.force_blocks {
-            if let Ok(block) = client.get_block(BlockKind::Latest).await {
-                // Skip, if block already exists
-                if last_block >= block.0 {
-                    return None;
-                }
-                (Some(block.clone()), block.0)
-            } else {
-                (None, 0)
+        let (current_block, current_height) = if self.force_blocks {
+            (None, 0)
+        } else if let Ok(block) = client.get_block(BlockKind::Latest).await {
+            // Skip, if block already exists
+            if last_block >= block.0 {
+                return None;
             }
+            (Some(block.clone()), block.0)
         } else {
             (None, 0)
         };
