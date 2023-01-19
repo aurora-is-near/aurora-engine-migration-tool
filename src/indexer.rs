@@ -129,23 +129,38 @@ impl Indexer {
         let last_block = self.data.lock().unwrap().last_block;
         println!("Starting height: {}", last_block);
         let mut handle = None;
-        let (tx, mut rx) = tokio::sync::mpsc::channel(2);
-        let mut term_stream = tokio::signal::unix::signal(SignalKind::terminate()).unwrap();
-        let mut itnrp_stream = tokio::signal::unix::signal(SignalKind::interrupt()).unwrap();
-        let mut quit_stream = tokio::signal::unix::signal(SignalKind::quit()).unwrap();
+        let (tx1, mut rx1) = tokio::sync::mpsc::channel(2);
+        let (tx2, mut rx2) = tokio::sync::mpsc::channel(2);
+        let (tx3, mut rx3) = tokio::sync::mpsc::channel(2);
+        let (tx4, mut rx4) = tokio::sync::mpsc::channel(2);
 
         tokio::spawn(async move {
             let _t = tokio::signal::ctrl_c().await;
-            let _ = tx.send(()).await;
+            let _ = tx1.send(()).await;
+        });
+        tokio::spawn(async move {
+            let mut stream = tokio::signal::unix::signal(SignalKind::terminate()).unwrap();
+            let _t = stream.recv().await;
+            let _ = tx2.send(()).await;
+        });
+        tokio::spawn(async move {
+            let mut stream = tokio::signal::unix::signal(SignalKind::interrupt()).unwrap();
+            let _t = stream.recv().await;
+            let _ = tx3.send(()).await;
+        });
+        tokio::spawn(async move {
+            let mut stream = tokio::signal::unix::signal(SignalKind::quit()).unwrap();
+            let _t = stream.recv().await;
+            let _ = tx4.send(()).await;
         });
 
         loop {
             tokio::select! {
                 h = self.handle_block(&mut client) => handle = h,
-                _ = rx.recv() => break,
-                _ = term_stream.recv() => break,
-                _ = itnrp_stream.recv() => break,
-                _ = quit_stream.recv() => break,
+                _ = rx1.recv() => break,
+                _ = rx2.recv() => break,
+                _ = rx3.recv() => break,
+                _ = rx4.recv() => break,
                 else => break,
             }
         }
