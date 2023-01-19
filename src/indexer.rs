@@ -121,6 +121,31 @@ impl Indexer {
         data.missed_blocks = missed_blocks;
     }
 
+    fn shutdown_listener() -> tokio::sync::mpsc::Receiver<()> {
+        use tokio::signal;
+        async fn send_msg(tx: tokio::sync::mpsc::Sender<()>) {
+            println!("\n[Waiting shutdown]");
+            let _ = tx.send(()).await;
+        }
+
+        let (tx, rx) = tokio::sync::mpsc::channel(1);
+        let mut terminate = signal::unix::signal(SignalKind::terminate()).unwrap();
+        let mut interrupt = signal::unix::signal(SignalKind::interrupt()).unwrap();
+        let mut quit = signal::unix::signal(SignalKind::quit()).unwrap();
+        let mut tstp = signal::unix::signal(SignalKind::from_raw(libc::SIGTSTP)).unwrap();
+
+        tokio::spawn(async move {
+            tokio::select! {
+                _ = signal::ctrl_c() => send_msg(tx).await,
+                _ = terminate.recv() => send_msg(tx).await,
+                _ = interrupt.recv() => send_msg(tx).await,
+                _ = quit.recv() => send_msg(tx).await,
+                _ = tstp.recv() => send_msg(tx).await,
+            }
+        });
+        rx
+    }
+
     /// Run indexing
     pub async fn run(&mut self) -> anyhow::Result<()> {
         let mut client = Client::new();
@@ -129,38 +154,12 @@ impl Indexer {
         let last_block = self.data.lock().unwrap().last_block;
         println!("Starting height: {}", last_block);
         let mut handle = None;
-        let (tx1, mut rx1) = tokio::sync::mpsc::channel(2);
-        let (tx2, mut rx2) = tokio::sync::mpsc::channel(2);
-        let (tx3, mut rx3) = tokio::sync::mpsc::channel(2);
-        let (tx4, mut rx4) = tokio::sync::mpsc::channel(2);
 
-        tokio::spawn(async move {
-            let _t = tokio::signal::ctrl_c().await;
-            let _ = tx1.send(()).await;
-        });
-        tokio::spawn(async move {
-            let mut stream = tokio::signal::unix::signal(SignalKind::terminate()).unwrap();
-            let _t = stream.recv().await;
-            let _ = tx2.send(()).await;
-        });
-        tokio::spawn(async move {
-            let mut stream = tokio::signal::unix::signal(SignalKind::interrupt()).unwrap();
-            let _t = stream.recv().await;
-            let _ = tx3.send(()).await;
-        });
-        tokio::spawn(async move {
-            let mut stream = tokio::signal::unix::signal(SignalKind::quit()).unwrap();
-            let _t = stream.recv().await;
-            let _ = tx4.send(()).await;
-        });
-
+        let mut shutdown_stream = Self::shutdown_listener();
         loop {
             tokio::select! {
                 h = self.handle_block(&mut client) => handle = h,
-                _ = rx1.recv() => break,
-                _ = rx2.recv() => break,
-                _ = rx3.recv() => break,
-                _ = rx4.recv() => break,
+                _ = shutdown_stream.recv() => break,
                 else => break,
             }
         }
