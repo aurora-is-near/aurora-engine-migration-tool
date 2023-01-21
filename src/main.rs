@@ -34,6 +34,10 @@ async fn main() -> anyhow::Result<()> {
                         .action(ArgAction::SetTrue),
                 )
                 .arg(
+                    arg!(-F --force "Force get blocks without check current block for historical and specific block indexing")
+                        .action(ArgAction::SetTrue),
+                )
+                .arg(
                     arg!(-s --stat "Show short indexing statistic")
                         .action(ArgAction::SetTrue),
                 )
@@ -94,10 +98,11 @@ async fn main() -> anyhow::Result<()> {
         }
         Some(("indexer", cmd)) => {
             let history = cmd.get_flag("history");
+            let force = cmd.get_flag("force");
             let stat = cmd.get_flag("stat");
             let fullstat = cmd.get_flag("fullstat");
             let block = cmd.get_one::<u64>("block").copied();
-            let mut indexer = Indexer::new("data.borsh", history, block)?;
+            let mut indexer = Indexer::new("data.borsh", history, block, force)?;
 
             if stat {
                 indexer.stats(false);

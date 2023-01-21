@@ -1,7 +1,6 @@
 use crate::rpc::{BlockKind, Client, IndexedData};
 use borsh::{BorshDeserialize, BorshSerialize};
 use near_primitives::types::BlockHeight;
-use near_primitives::views::ChunkHeaderView;
 use std::collections::HashSet;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -26,6 +25,7 @@ pub struct Indexer {
     pub last_saved_time: Instant,
     pub fetch_history: bool,
     pub force_index_from_block: Option<u64>,
+    pub force_blocks: bool,
 }
 
 impl Indexer {
@@ -34,6 +34,7 @@ impl Indexer {
         data_file: P,
         fetch_history: bool,
         block_height: Option<BlockHeight>,
+        force_blocks: bool,
     ) -> anyhow::Result<Self> {
         // If file doesn't exist just return default data
         let data = std::fs::read(&data_file).unwrap_or_default();
@@ -41,6 +42,9 @@ impl Indexer {
 
         if let Some(height) = block_height {
             data.last_block = height - 1;
+            if data.first_block > height {
+                data.first_block = height;
+            }
         }
 
         Ok(Self {
@@ -49,6 +53,7 @@ impl Indexer {
             last_saved_time: Instant::now(),
             fetch_history,
             force_index_from_block: block_height,
+            force_blocks,
         })
     }
 
@@ -124,9 +129,7 @@ impl Indexer {
 
         loop {
             tokio::select! {
-                block = client.get_block(BlockKind::Latest) => if let Ok(block) = block {
-                    handle = self.handle_block(block, &mut client).await;
-                },
+                h = self.handle_block(&mut client) => handle = h,
                 _ = rx.recv() => break,
                 else => break,
             }
@@ -141,33 +144,37 @@ impl Indexer {
     }
 
     /// Handle fetching blocks
-    async fn handle_block(
-        &mut self,
-        block: (BlockHeight, Vec<ChunkHeaderView>),
-        client: &mut Client,
-    ) -> Option<tokio::task::JoinHandle<()>> {
+    async fn handle_block(&mut self, client: &mut Client) -> Option<tokio::task::JoinHandle<()>> {
         let last_block = self.data.lock().unwrap().last_block;
-        // Skip, if block already exists
-        if last_block >= block.0 {
-            return None;
-        }
-        // Check, do we need fetch history data or force check from some block height
-        let (height, chunks) = if self.force_index_from_block.is_some() || self.fetch_history {
-            if block.0 - last_block > 0 {
-                if let Ok(block) = client.get_block(BlockKind::Height(last_block + 1)).await {
-                    block
-                } else {
-                    // If block not found do not fail, just increment height
-                    let mut data = self.data.lock().unwrap();
-                    data.last_block = last_block + 1;
+        let (current_block, current_height) = if !self.force_blocks {
+            if let Ok(block) = client.get_block(BlockKind::Latest).await {
+                // Skip, if block already exists
+                if last_block >= block.0 {
                     return None;
                 }
+                (Some(block.clone()), block.0)
             } else {
-                block.clone()
+                (None, 0)
             }
         } else {
-            block.clone()
+            (None, 0)
         };
+
+        // Check, do we need fetch history data or force check from some block height
+        let block = if self.force_index_from_block.is_some() || self.fetch_history {
+            if let Ok(block) = client.get_block(BlockKind::Height(last_block + 1)).await {
+                Some(block)
+            } else {
+                // If block not found do not fail, just increment height
+                let mut data = self.data.lock().unwrap();
+                data.last_block = last_block + 1;
+                None
+            }
+        } else {
+            current_block
+        };
+        let (height, chunks) = block?;
+
         print!("\rHeight: {:?}", height);
         std::io::stdout().flush().expect("Flush failed");
 
@@ -176,13 +183,13 @@ impl Indexer {
             height,
             indexed_data,
             client.unresolved_blocks.clone(),
-            block.0,
+            current_height,
         );
 
         // Save data
         if self.last_saved_time.elapsed() > SAVE_FILE_TIMEOUT {
             self.last_saved_time = Instant::now();
-            let current_block_height = block.0;
+            let current_block_height = current_height;
             let data_file = self.data_file.clone();
             let data = self.data.lock().unwrap().clone();
 

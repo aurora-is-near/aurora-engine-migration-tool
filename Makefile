@@ -13,7 +13,7 @@ build-testnet-release:
 	@cargo build --features testnet --release
 	
 run: build-mainnet-release
-	@${BIN} --features mainnet --release
+	@${BIN} indexer --help
 	
 migrate-testnet: build-testnet-release
 	@${BIN} migrate --account ${ACCOUNT_ID} --key ${ACCOUNT_KEY} --file contract_state.borsh
@@ -30,8 +30,9 @@ build-index:
 index-block: build-index-archival
 #	@${BIN} indexer --block 79373253
 #	@${BIN} indexer --block 79377726
-#	@${BIN} indexer --block 80733632
-	@${BIN} indexer --block 82153326
+#	@${BIN} indexer --block 82952720
+	@${BIN} indexer --force --block 82952720 
+
 
 index-latest: build-index
 	@${BIN} indexer 
