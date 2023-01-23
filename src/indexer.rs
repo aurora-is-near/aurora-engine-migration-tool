@@ -57,7 +57,13 @@ impl Indexer {
         })
     }
 
-    pub fn stats(&self, extend: bool) {
+    pub async fn stats(&self, extend: bool) {
+        let mut client = Client::new();
+        let height = if let Ok(block) = client.get_block(BlockKind::Latest).await {
+            block.0
+        } else {
+            0
+        };
         let data = self.data.lock().unwrap();
 
         if extend {
@@ -68,9 +74,11 @@ impl Indexer {
                 data.missed_blocks
             );
         }
+
         println!(r#"First block: {:?}"#, data.first_block);
         println!("Last block: {:?}", data.last_block);
-        println!("Current block: {:?}", data.current_block);
+        println!("Last saved in current block: {:?}", data.current_block);
+        println!("Current block: {:?}", height);
         println!("Missed blocks: {}", data.missed_blocks.len());
         println!("Accounts: {}", data.data.accounts.len());
         println!("Proofs: {}", data.data.proofs.len());

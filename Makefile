@@ -31,7 +31,7 @@ index-block: build-index-archival
 #	@${BIN} indexer --block 79373253
 #	@${BIN} indexer --block 79377726
 #	@${BIN} indexer --block 82952720
-	@${BIN} indexer --force --block 82952720 
+	@${BIN} indexer --force --block 82955839 
 
 
 index-latest: build-index

@@ -105,9 +105,9 @@ async fn main() -> anyhow::Result<()> {
             let mut indexer = Indexer::new("data.borsh", history, block, force)?;
 
             if stat {
-                indexer.stats(false);
+                indexer.stats(false).await;
             } else if fullstat {
-                indexer.stats(true);
+                indexer.stats(true).await;
             } else {
                 indexer.run().await?;
             }
