@@ -10,6 +10,7 @@ use tokio::signal::unix::SignalKind;
 use tokio::time::Instant;
 
 const SAVE_FILE_TIMEOUT: Duration = Duration::from_secs(60);
+const FORWARD_BLOCK_TIMEOUT: Duration = Duration::from_secs(240);
 
 #[derive(Debug, Default, Clone, BorshSerialize, BorshDeserialize)]
 pub struct IndexerData {
@@ -23,10 +24,12 @@ pub struct IndexerData {
 pub struct Indexer {
     pub data: Arc<Mutex<IndexerData>>,
     pub data_file: PathBuf,
-    pub last_saved_time: Instant,
     pub fetch_history: bool,
     pub force_index_from_block: Option<u64>,
     pub force_blocks: bool,
+    forward_block: Option<u64>,
+    last_saved_time: Instant,
+    last_forward_time: Instant,
 }
 
 impl Indexer {
@@ -51,10 +54,12 @@ impl Indexer {
         Ok(Self {
             data: Arc::new(Mutex::new(data)),
             data_file: data_file.as_ref().to_path_buf(),
-            last_saved_time: Instant::now(),
             fetch_history,
             force_index_from_block: block_height,
             force_blocks,
+            forward_block: None,
+            last_saved_time: Instant::now(),
+            last_forward_time: Instant::now(),
         })
     }
 
@@ -103,12 +108,15 @@ impl Indexer {
         indexed_data: IndexedData,
         missed_blocks: HashSet<BlockHeight>,
         current_block: BlockHeight,
+        last_block: BlockHeight,
+        first_block: BlockHeight,
     ) {
         let mut data = self.data.lock().unwrap();
+        data.first_block = first_block;
         if data.first_block == 0 {
             data.first_block = height;
         }
-        data.last_block = height;
+        data.last_block = last_block;
         data.current_block = current_block;
         for account in indexed_data.accounts {
             data.data.accounts.insert(account);
@@ -175,21 +183,47 @@ impl Indexer {
     /// Handle fetching blocks
     async fn handle_block(&mut self, client: &mut Client) -> Option<tokio::task::JoinHandle<()>> {
         let last_block = self.data.lock().unwrap().last_block;
+        let first_block = self.data.lock().unwrap().first_block;
         let (current_block, current_height) = if self.force_blocks {
             (None, 0)
-        } else if let Ok(block) = client.get_block(BlockKind::Latest).await {
-            // Skip, if block already exists
-            if last_block >= block.0 {
-                return None;
+        } else if self.last_forward_time.elapsed() > FORWARD_BLOCK_TIMEOUT {
+            self.last_forward_time = Instant::now();
+            if let Ok(block) = client.get_block(BlockKind::Latest).await {
+                // Skip, if block already exists
+                if last_block >= block.0 {
+                    return None;
+                }
+                self.forward_block = Some(block.0);
+                (Some(block.clone()), block.0)
+            } else {
+                (None, 0)
             }
-            (Some(block.clone()), block.0)
         } else {
             (None, 0)
         };
 
+        // Calculate Height to catch it. Depend on several parameters.
+        // 1. if it's just `index_from_block` - just linear increment `last_block`
+        // 2. for other cases cha
+        //   2.1. if `last_block > forward_block` - fetch history
+        //   2.2. if 2.1. false - fetch forward blocks
+        //   2.3. if `forward_block` - just fetch history
+        let (num_height, last_block, first_block) = if self.force_index_from_block.is_some() {
+            (last_block + 1, last_block + 1, first_block)
+        } else if let Some(forward_block) = self.forward_block {
+            if forward_block <= last_block + 1 {
+                self.forward_block = None;
+                (first_block - 1, last_block, first_block - 1)
+            } else {
+                (last_block + 1, last_block + 1, first_block)
+            }
+        } else {
+            (first_block - 1, last_block, first_block - 1)
+        };
+
         // Check, do we need fetch history data or force check from some block height
-        let block = if self.force_index_from_block.is_some() || self.fetch_history {
-            if let Ok(block) = client.get_block(BlockKind::Height(last_block + 1)).await {
+        let block = if self.force_index_from_block.is_some() {
+            if let Ok(block) = client.get_block(BlockKind::Height(num_height)).await {
                 Some(block)
             } else {
                 // If block not found do not fail, just increment height
@@ -211,6 +245,8 @@ impl Indexer {
             indexed_data,
             client.unresolved_blocks.clone(),
             current_height,
+            last_block,
+            first_block,
         );
 
         // Save data

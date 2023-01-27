@@ -36,7 +36,7 @@ index-block: build-index-archival
 index-latest: build-index
 	@${BIN} indexer 
 
-index-history: build-index
+index-history: build-index-archival
 	@${BIN} indexer -H
 
 index-stat: build-index
