@@ -10,7 +10,7 @@ use tokio::signal::unix::SignalKind;
 use tokio::time::Instant;
 
 const SAVE_FILE_TIMEOUT: Duration = Duration::from_secs(60);
-const FORWARD_BLOCK_TIMEOUT: Duration = Duration::from_secs(240);
+const FORWARD_BLOCK_TIMEOUT: Duration = Duration::from_secs(120);
 
 #[derive(Debug, Default, Clone, BorshSerialize, BorshDeserialize)]
 pub struct IndexerData {
@@ -98,7 +98,7 @@ impl Indexer {
     ) {
         std::fs::write(data_file, data.try_to_vec().expect("Failed serialize"))
             .expect("Failed save indexed data");
-        println!("[SAVE: {:?}]", current_block_height);
+        println!(" [SAVE: {:?}]", current_block_height);
     }
 
     /// Set current index data
@@ -222,7 +222,7 @@ impl Indexer {
         };
 
         // Check, do we need fetch history data or force check from some block height
-        let block = if self.force_index_from_block.is_some() {
+        let block = if self.force_index_from_block.is_some() || self.fetch_history {
             if let Ok(block) = client.get_block(BlockKind::Height(num_height)).await {
                 Some(block)
             } else {
@@ -238,6 +238,17 @@ impl Indexer {
 
         print!("\rHeight: {:?}", height);
         std::io::stdout().flush().expect("Flush failed");
+
+        // Get `current_height`
+        let current_height = if current_height == 0 {
+            if let Some(height) = self.forward_block {
+                height
+            } else {
+                0
+            }
+        } else {
+            current_height
+        };
 
         let indexed_data = client.get_chunk_indexed_data(chunks, height).await;
         self.set_indexed_data(
