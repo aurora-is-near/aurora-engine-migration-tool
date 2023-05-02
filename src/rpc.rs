@@ -1,14 +1,16 @@
 //! # RPC
 //! RPC toolset for effective communication with near-rpc for specific network.
 //!
-use borsh::{BorshDeserialize, BorshSerialize};
 use near_jsonrpc_client::{methods, JsonRpcClient, MethodCallResult};
 use near_jsonrpc_primitives::types::query::QueryResponseKind;
 use near_primitives::transaction::{Action, FunctionCallAction, Transaction};
-use near_primitives::types::{AccountId, BlockHeight, BlockReference};
+use near_primitives::types::{BlockHeight, BlockReference};
 use near_primitives::views::{ActionView, ChunkHeaderView, FinalExecutionStatus};
+use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::U128;
+use near_sdk::AccountId;
 use std::collections::HashSet;
+use std::str::FromStr;
 use std::time::Duration;
 
 use self::error::CommitTx;
@@ -282,12 +284,16 @@ impl Client {
                 let res = self.get_actions_data(tx.actions.clone());
                 // Added predecessor account
                 if res.is_action_found {
-                    results.accounts.insert(tx.signer_id.clone());
+                    results
+                        .accounts
+                        .insert(AccountId::from_str(tx.signer_id.as_str()).unwrap());
                     results.accounts.insert(AURORA_CONTRACT.parse().unwrap());
 
                     let mut log = res.log;
                     if !log.is_empty() {
-                        log[0].accounts.push(tx.signer_id.clone());
+                        log[0]
+                            .accounts
+                            .push(AccountId::from_str(tx.signer_id.as_str()).unwrap());
                         log[0].accounts.push(AURORA_CONTRACT.parse().unwrap());
                     }
                     results.logs.push(IndexedResultLog {
@@ -318,15 +324,27 @@ impl Client {
                     let res = self.get_actions_data(actions);
                     // Added predecessor account
                     if res.is_action_found {
-                        results.accounts.insert(signer_id.clone());
-                        results.accounts.insert(receipt.predecessor_id.clone());
-                        results.accounts.insert(receipt.receiver_id.clone());
+                        results
+                            .accounts
+                            .insert(AccountId::from_str(signer_id.as_str()).unwrap());
+                        results
+                            .accounts
+                            .insert(AccountId::from_str(receipt.predecessor_id.as_str()).unwrap());
+                        results
+                            .accounts
+                            .insert(AccountId::from_str(receipt.receiver_id.as_str()).unwrap());
 
                         let mut log = res.log;
                         if !log.is_empty() {
-                            log[0].accounts.push(signer_id.clone());
-                            log[0].accounts.push(receipt.predecessor_id.clone());
-                            log[0].accounts.push(receipt.receiver_id.clone());
+                            log[0]
+                                .accounts
+                                .push(AccountId::from_str(signer_id.as_str()).unwrap());
+                            log[0].accounts.push(
+                                AccountId::from_str(receipt.predecessor_id.as_str()).unwrap(),
+                            );
+                            log[0]
+                                .accounts
+                                .push(AccountId::from_str(receipt.receiver_id.as_str()).unwrap());
                         }
                         results.logs.push(IndexedResultLog {
                             block_height,

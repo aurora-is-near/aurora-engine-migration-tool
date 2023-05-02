@@ -1,9 +1,9 @@
 use crate::rpc::{Client, REQUEST_TIMEOUT};
 use aurora_engine_migration_tool::{FungibleToken, StateData};
-use aurora_engine_types::{account_id::AccountId, types::NEP141Wei};
-use borsh::{BorshDeserialize, BorshSerialize};
-use near_sdk::json_types::U128;
-use near_sdk::{Balance, StorageUsage};
+use aurora_engine_types::types::NEP141Wei;
+use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
+use near_sdk::json_types::{U128, U64};
+use near_sdk::{AccountId, Balance, StorageUsage};
 use serde_json::json;
 use std::collections::HashMap;
 use std::io::Write;
@@ -269,7 +269,7 @@ impl Migration {
         let data = rpc
             .request_view(AURORA_CONTRACT, "get_accounts_counter".to_string(), vec![])
             .await?;
-        migration_data.accounts_counter = u64::try_from_slice(&data).unwrap();
+        migration_data.accounts_counter = U64::try_from_slice(&data).unwrap().0;
 
         let data = rpc
             .request_view(AURORA_CONTRACT, "ft_total_supply".to_string(), vec![])
@@ -288,10 +288,9 @@ impl Migration {
                 .await?;
             let balance: U128 =
                 serde_json::from_slice(&data[..]).expect("Failed deserialize account balance");
-            let account_id = AccountId::new(account.as_str()).expect("Failed deserialize account");
             migration_data
                 .accounts
-                .insert(account_id, NEP141Wei::new(balance.0));
+                .insert(account, NEP141Wei::new(balance.0));
             tokio::time::sleep(REQUEST_TIMEOUT).await;
         }
 

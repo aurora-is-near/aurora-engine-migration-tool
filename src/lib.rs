@@ -1,6 +1,6 @@
-pub use aurora_engine_types::account_id::AccountId;
 pub use aurora_engine_types::types::{NEP141Wei, StorageUsage};
-pub use borsh::{BorshDeserialize, BorshSerialize};
+pub use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
+use near_sdk::AccountId;
 use serde_derive::Deserialize;
 use std::collections::HashMap;
 
