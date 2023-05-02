@@ -1,8 +1,8 @@
 use aurora_engine_migration_tool::{BlockData, FungibleToken, StateData};
-use aurora_engine_types::account_id::AccountId;
 use aurora_engine_types::storage::{EthConnectorStorageId, KeyPrefix, VersionPrefix};
 use aurora_engine_types::types::NEP141Wei;
-use borsh::{BorshDeserialize, BorshSerialize};
+use near_sdk::borsh::{BorshDeserialize, BorshSerialize};
+use near_sdk::AccountId;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -89,7 +89,7 @@ pub fn parse<P: AsRef<Path>>(json_file: P, output: Option<P>) -> anyhow::Result<
                 proofs.push(proof);
             }
             KeyType::Accounts(value) => {
-                let account = AccountId::try_from(value.as_slice())
+                let account = AccountId::try_from_slice(value.as_slice())
                     .map_err(|e| anyhow::anyhow!("Failed parse account, {e}"))?;
                 let account_balance = NEP141Wei::try_from_slice(
                     &base64::decode(&result_value.value)

@@ -1,6 +1,6 @@
 use crate::rpc::{BlockKind, Client, IndexedData};
-use borsh::{BorshDeserialize, BorshSerialize};
 use near_primitives::types::BlockHeight;
+use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use std::collections::HashSet;
 use std::io::Write;
 use std::path::{Path, PathBuf};
