@@ -13,21 +13,21 @@ publish = false
 autobenches = false
 
 [dependencies]
-aurora-engine-types = { git = "https://github.com/aurora-is-near/aurora-engine.git", rev = "904010fa86199a848d3709272d36548daf24359e", default-features = false }
-serde = "1"
-serde_json = "1"
-serde_derive = "1"
-base64 = "0.13"
-borsh =  "0.9.3"
-near-jsonrpc-client = "0.4.1"
-near-jsonrpc-primitives = "0.15.0"
-near-primitives = "0.15.0"
-near-sdk = "4.1"
 anyhow = "1.0"
-tokio = { version = "1.24", features = ["full"] }
+aurora-engine-types = { git = "https://github.com/aurora-is-near/aurora-engine.git", tag = "2.9.0", default-features = false }
+base64 = "0.13"
+borsh =  "0.10"
 clap = { version = "4.0", features = ["cargo"] }
-near-crypto = "0.15"
 libc = "0.2"
+near-crypto = "0.16"
+near-jsonrpc-client = "0.5"
+near-jsonrpc-primitives = "0.16"
+near-primitives = "0.16"
+near-sdk = "4.1"
+serde = "1"
+serde_derive = "1"
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
 
 [features]
 mainnet = ["log"]

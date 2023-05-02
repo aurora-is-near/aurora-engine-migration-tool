@@ -2,7 +2,7 @@ use crate::rpc::{Client, REQUEST_TIMEOUT};
 use aurora_engine_migration_tool::{FungibleToken, StateData};
 use aurora_engine_types::{account_id::AccountId, types::NEP141Wei};
 use borsh::{BorshDeserialize, BorshSerialize};
-use near_sdk::json_types::{U128, U64};
+use near_sdk::json_types::U128;
 use near_sdk::{Balance, StorageUsage};
 use serde_json::json;
 use std::collections::HashMap;
@@ -269,7 +269,7 @@ impl Migration {
         let data = rpc
             .request_view(AURORA_CONTRACT, "get_accounts_counter".to_string(), vec![])
             .await?;
-        migration_data.accounts_counter = U64::try_from_slice(&data).unwrap().0;
+        migration_data.accounts_counter = u64::try_from_slice(&data).unwrap();
 
         let data = rpc
             .request_view(AURORA_CONTRACT, "ft_total_supply".to_string(), vec![])
