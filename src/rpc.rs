@@ -36,13 +36,17 @@ pub const AURORA_CONTRACT: &str = "aurora";
 /// How many retries per success request
 const RETRIES_COUNT: u8 = 10;
 
-/// Transaction action method, allowed for output parsing
+/// Transaction action method, allowed for output parsing and
+/// get `predecessor_account_id`
 const ACTION_METHODS: &[&str] = &[
     "ft_transfer",
     "deposit",
     "ft_transfer_call",
     "withdraw",
     "finish_deposit",
+    "storage_deposit",
+    "storage_withdraw",
+    "storage_unregister",
 ];
 
 pub struct Client {
@@ -171,6 +175,20 @@ impl Client {
     }
 
     /// Parse action arguments and return accounts and proof keys
+    /// Main goal is gather all accounts that can be modified.
+    /// In `aurora-eth-connector` migration just receive balances
+    /// for modified accounts. So main goals is just catch modified
+    /// accounts, and proof-key for `finish_deposit`.
+    ///
+    /// `deposit` function catch just for log information.
+    ///
+    /// `withdraw` function catch also for information, the `sender_id`
+    /// is from `predecessor_account_id` that we catch early in main flow.
+    ///
+    /// `storage_withdraw` - do nothing with account, just for logs.
+    ///
+    /// `storage_unregister` - use `predecessor_account_id` (that catch in
+    /// other flow), just for log.
     #[must_use]
     pub fn parse_action_argument(
         &self,
@@ -237,12 +255,44 @@ impl Client {
                 print_log("deposit");
                 (vec![], None)
             }
+            "storage_deposit" => {
+                #[derive(Debug, Clone, Deserialize)]
+                pub struct StorageDepositArgs {
+                    pub account_id: Option<AccountId>,
+                    pub registration_only: Option<bool>,
+                }
+                if let Ok(res) = serde_json::from_slice::<StorageDepositArgs>(args) {
+                    print_log("storage_deposit");
+                    if let Some(account_id) = res.account_id {
+                        (vec![account_id], None)
+                    } else {
+                        (vec![], None)
+                    }
+                } else {
+                    print_log("Failed deserialize FinishDepositArgs");
+                    (vec![], None)
+                }
+            }
+            "storage_withdraw" => {
+                print_log("storage_withdraw");
+                (vec![], None)
+            }
+            "storage_unregister" => {
+                print_log("storage_unregister");
+                (vec![], None)
+            }
             _ => (vec![], None),
         }
     }
 
     /// Get transactions and receipts indexed data from chunks.
     /// Return indexed data including actions log.
+    ///
+    /// Special notice to catch `predecessor_account_id`:
+    /// It's especially important
+    /// for `withdraw`, `ft_transfer`, `ft_transfer_call`
+    /// and all `storage_deposit`,`storage_withdraw`,
+    /// `storage_unregister`.
     pub async fn get_chunk_indexed_data(
         &mut self,
         chunks: Vec<ChunkHeaderView>,
@@ -280,7 +330,11 @@ impl Client {
                 }
                 // Get actions and proof keys from transaction
                 let res = self.get_actions_data(tx.actions.clone());
-                // Added predecessor account
+
+                // Added predecessor account. It's especially important
+                // for `withdraw`, `ft_transfer`, `ft_transfer_call`
+                // and all `storage_deposit`,`storage_withdraw`,
+                // `storage_unregister`
                 if res.is_action_found {
                     results
                         .accounts
@@ -320,7 +374,9 @@ impl Client {
                 } = receipt.receipt.clone()
                 {
                     let res = self.get_actions_data(actions);
-                    // Added predecessor account
+                    // Added predecessor_account_id.
+                    // NOTE: same notice as before about importance
+                    // for that field.
                     if res.is_action_found {
                         results
                             .accounts
