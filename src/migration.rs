@@ -113,18 +113,18 @@ impl Migration {
                 println!("{msg}: {counter} [Missed: {:?}]", missed.len());
             }
             MigrationCheckResult::Success => {
-                print!("\r{msg}: {counter} [{:?}]", correctness);
+                print!("\r{msg}: {counter} [{correctness:?}]");
                 std::io::stdout().flush()?;
             }
             _ => {
                 if let MigrationCheckResult::TotalSupply(_) = correctness {
-                    println!("{msg} [Missed field: {:?}]", correctness);
+                    println!("{msg} [Missed field: {correctness:?}]");
                 }
                 if let MigrationCheckResult::StorageUsage(_) = correctness {
-                    println!("{msg} [Missed field: {:?}]", correctness);
+                    println!("{msg} [Missed field: {correctness:?}]");
                 }
                 if let MigrationCheckResult::StatisticsCounter(_) = correctness {
-                    println!("{msg} [Missed field: {:?}]", correctness);
+                    println!("{msg} [Missed field: {correctness:?}]");
                 }
             }
         }

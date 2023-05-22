@@ -129,7 +129,7 @@ impl Client {
                 let mut msg = "Failed get block".to_string();
                 if let BlockKind::Height(height) = bloch_kind {
                     self.unresolved_blocks.insert(height);
-                    msg = format!("{}: {:?}", msg, height);
+                    msg = format!("{msg}: {height:?}");
                 }
                 print_log(&msg);
                 e
@@ -257,7 +257,7 @@ impl Client {
         // Fetch all chunks from block
         for chunk in chunks {
             // Get chunk data
-            let chunk_data = if let Ok(chunk_data) = self
+            let Ok(chunk_data) = self
                 .call(methods::chunk::RpcChunkRequest {
                     chunk_reference:
                         near_jsonrpc_primitives::types::chunks::ChunkReference::ChunkHash {
@@ -265,9 +265,7 @@ impl Client {
                         },
                 })
                 .await
-            {
-                chunk_data
-            } else {
+            else {
                 print_log("Failed get chunk");
                 // Set block as unresolved
                 self.unresolved_blocks.insert(block_height);
@@ -429,14 +427,14 @@ impl Client {
                 .client
                 .call(&request)
                 .await
-                .map_err(|err| CommitTx::Commit(format!("{:?}", err)));
+                .map_err(|err| CommitTx::Commit(format!("{err:?}")));
             // Check response and set errors if it needs
             if let Ok(tx_res) = res {
                 // If success - check response status
                 match tx_res.status {
                     FinalExecutionStatus::SuccessValue(_) => return Ok(()),
                     FinalExecutionStatus::Failure(err) => {
-                        res = Err(CommitTx::Status(format!("{:?}", err)));
+                        res = Err(CommitTx::Status(format!("{err:?}")));
                     }
                     _ => res = Err(CommitTx::Status("Other".to_string())),
                 }
@@ -444,13 +442,11 @@ impl Client {
 
             // If request failed for some reason - retry request
             retry += 1;
-            println!("\nRequest retry: {:?}", retry);
+            println!("\nRequest retry: {retry:?}");
             // If all retries failed it's incident, just panic
             assert!(
                 retry <= RETRIES_COUNT,
-                "Failed commit tx {:?} times: {:?}",
-                RETRIES_COUNT,
-                res
+                "Failed commit tx {RETRIES_COUNT:?} times: {res:?}",
             );
         }
     }
@@ -515,9 +511,9 @@ mod error {
         fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
             match self {
                 Self::AccessKey => write!(f, "ERR_FAILED_GET_ACCESS_KEY"),
-                Self::Commit(msg) => write!(f, "ERR_FAILED_COMMIT_TX: {}", msg),
+                Self::Commit(msg) => write!(f, "ERR_FAILED_COMMIT_TX: {msg}"),
                 Self::View => write!(f, "ERR_FAILED_VIEW_TX"),
-                Self::Status(msg) => write!(f, "ERR_TX_STATUS_FAIL: {}", msg),
+                Self::Status(msg) => write!(f, "ERR_TX_STATUS_FAIL: {msg}"),
             }
         }
     }

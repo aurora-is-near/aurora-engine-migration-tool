@@ -120,7 +120,7 @@ pub fn parse<P: AsRef<Path>>(json_file: P, output: Option<P>) -> anyhow::Result<
         "Wrong accounts count"
     );
     // Store result data
-    println!("Result file: {:?}", result_file_name);
+    println!("Result file: {result_file_name:?}");
     StateData {
         contract_data,
         accounts,

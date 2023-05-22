@@ -84,7 +84,7 @@ impl Indexer {
         println!(r#"First block: {:?}"#, data.first_block);
         println!("Last block: {:?}", data.last_block);
         println!("Last saved in current block: {:?}", data.current_block);
-        println!("Current block: {:?}", height);
+        println!("Current block: {height:?}");
         println!("Missed blocks: {}", data.missed_blocks.len());
         println!("Accounts: {}", data.data.accounts.len());
         println!("Proofs: {}", data.data.proofs.len());
@@ -98,7 +98,7 @@ impl Indexer {
     ) {
         std::fs::write(data_file, data.try_to_vec().expect("Failed serialize"))
             .expect("Failed save indexed data");
-        println!(" [SAVE: {:?}]", current_block_height);
+        println!(" [SAVE: {current_block_height:?}]");
     }
 
     /// Set current index data
@@ -160,7 +160,7 @@ impl Indexer {
         let missed_blocks = self.data.lock().unwrap().missed_blocks.clone();
         client.set_missed_blocks(missed_blocks);
         let last_block = self.data.lock().unwrap().last_block;
-        println!("Starting height: {}", last_block);
+        println!("Starting height: {last_block}");
         let mut handle = None;
 
         let mut shutdown_stream = Self::shutdown_listener();
@@ -236,7 +236,7 @@ impl Indexer {
         };
         let (height, chunks) = block?;
 
-        print!("\rHeight: {:?}", height);
+        print!("\rHeight: {height:?}");
         std::io::stdout().flush().expect("Flush failed");
 
         // Get `current_height`
