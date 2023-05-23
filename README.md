@@ -38,6 +38,18 @@ to the new `aurora-eth-connector` contract. And in this case, parsing
 `Aurora Engine` state snapshot collects the necessary data and writes 
 it to the resulting file, serializing it using `borsh`.
 
+```
+Parse Aurora Engine contract state snapshot and store result to file serialized with borsh
+
+Usage: aurora-engine-migration-tool parser [OPTIONS] --file <FILE>
+
+Options:
+  -f, --file <FILE>    Aurora Engine snapshot json file
+  -o, --output <FILE>  Output file with results data serialized with  borsh
+  -h, --help           Print help
+
+```
+
 Example:
 
 ```
@@ -45,7 +57,51 @@ $ aurora-engine-migration-tool parse --file engine-snaphot-2023-05-03-120132.jso
 ```
 
 
-### Migration
+## Indexer
+
+**How is data indexed?** It is possible to index Aurora Engine contract 
+data via NEAR RPC - mainnet, mainnet-archival (after 250000 from current 
+block), testnet. Only successful blocks and chunks are indexed. All 
+NEAR shards are also processed. That guarantees receipt of all 
+necessary data. Transactions for the `aurora` contract are parsed. At 
+the same time, transactions in which methods are called that only 
+apply to `eth-connector` (including those related to the NEP-141 
+standard):
+
+- `ft_transfer` - parsed method arguments and `predecessor_id`. Gather only accounts.
+- `ft_transfer_call` - parsed method arguments and `predecessor_id`. Gather only accounts.
+- `deposit` - parsed only `predecessor_id`. Gather only accounts.
+- `withdraw` - parsed only `predecessor_id`. Gather only accounts.
+- `finish_deposit` - parsed method arguments and `predecessor_id`. Gather accounts and deposit proof data.
+- `storage_deposit` parsed method arguments and `predecessor_id`. Gather only accounts.
+- `storage_withdraw` - parsed only `predecessor_id`. Gather only accounts.
+- `storage_unregister` - parsed only `predecessor_id`. Gather only accounts.
+
+**IMPORTANT NOTICE** We need only accounts without balances (balances 
+will be received with the command `prepare-migrate-indexed`), and proof 
+data. You **MUST** run the command `prepare-migrate-indexed` after 
+indexing data.
+
+```
+Run indexing NEAR blockchain blocks and chunks for all shards, for specific NEAR network. For Aurora Engine contract.
+
+Usage: aurora-engine-migration-tool indexer [OPTIONS]
+
+Options:
+  -H, --history               Indexing missed historical blocks
+  -F, --force                 Force get blocks without check current block for historical and specific block indexing
+  -s, --stat                  Show short indexed statistic
+      --fullstat              Show full indexed statistic
+  -b, --block <BLOCK_HEIGHT>  Start indexing from specific block
+  -h, --help                  Print help
+```
+
+
+## Prepare indexed data for migration
+
+
+
+## Migration
 
 Parameters:
 - `--account` - contract name for migration. Ex: `some-acc.testnet`.

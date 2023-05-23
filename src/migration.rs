@@ -239,7 +239,7 @@ impl Migration {
     }
 
     /// Prepare indexed data for migration from Indexer data
-    /// and store to file
+    /// and store to file serialized with borsh.
     pub async fn prepare_indexed<P: AsRef<Path>>(input: P, output: P) -> anyhow::Result<()> {
         use crate::indexer::IndexerData;
         use crate::rpc::AURORA_CONTRACT;

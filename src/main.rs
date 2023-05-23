@@ -14,21 +14,21 @@ async fn main() -> anyhow::Result<()> {
         .subcommand_required(true)
         .subcommand(
             Command::new("parser")
-                .about("parse Aurora state snapshot")
+                .about("Parse Aurora Engine contract state snapshot and store result to file serialized with borsh")
                 .arg(
-                    arg!(-f --file <FILE> "Snapshot json file")
+                    arg!(-f --file <FILE> "Aurora Engine snapshot json file")
                         .required(true)
                         .value_parser(value_parser!(PathBuf)),
                 )
                 .arg(
-                    arg!(-o --output <FILE> "Output file with results data")
+                    arg!(-o --output <FILE> "Output file with results data serialized with  borsh")
                         .required(false)
                         .value_parser(value_parser!(PathBuf)),
                 ),
         )
         .subcommand(
             Command::new("indexer")
-                .about("run indexing NEAR blockchain blocks for Aurora contract")
+                .about("Run indexing NEAR blockchain blocks and chunks for all shards, for specific NEAR network. For Aurora Engine contract.")
                 .arg(
                     arg!(-H --history "Indexing missed historical blocks")
                         .action(ArgAction::SetTrue),
@@ -38,11 +38,11 @@ async fn main() -> anyhow::Result<()> {
                         .action(ArgAction::SetTrue),
                 )
                 .arg(
-                    arg!(-s --stat "Show short indexing statistic")
+                    arg!(-s --stat "Show short indexed statistic")
                         .action(ArgAction::SetTrue),
                 )
                 .arg(
-                    arg!(--fullstat "Show full indexing statistic")
+                    arg!(--fullstat "Show full indexed statistic")
                         .action(ArgAction::SetTrue),
                 )
                 .arg(
