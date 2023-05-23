@@ -10,7 +10,6 @@ enum KeyType {
     Accounts(Vec<u8>),
     Contract,
     Proof(Vec<u8>),
-    Statistic,
     Unknown,
 }
 
@@ -22,14 +21,6 @@ pub fn construct_contract_key(suffix: EthConnectorStorageId) -> Vec<u8> {
     bytes_to_key(KeyPrefix::EthConnector, &[u8::from(suffix)])
 }
 
-pub fn read_u64(value: &[u8]) -> u64 {
-    assert_eq!(value.len(), 8, "Failed parse u64");
-
-    let mut result = [0u8; 8];
-    result.copy_from_slice(value.as_ref());
-    u64::from_le_bytes(result)
-}
-
 pub fn prefix_proof_key() -> Vec<u8> {
     construct_contract_key(EthConnectorStorageId::UsedEvent)
 }
@@ -38,15 +29,6 @@ pub fn prefix_account_key() -> Vec<u8> {
     bytes_to_key(
         KeyPrefix::EthConnector,
         &[u8::from(EthConnectorStorageId::FungibleToken)],
-    )
-}
-
-pub fn get_statistic_key() -> Vec<u8> {
-    bytes_to_key(
-        KeyPrefix::EthConnector,
-        &[u8::from(
-            EthConnectorStorageId::StatisticsAuroraAccountsCounter,
-        )],
     )
 }
 
@@ -75,7 +57,6 @@ pub fn parse<P: AsRef<Path>>(json_file: P, output: Option<P>) -> anyhow::Result<
 
     let mut proofs: Vec<String> = vec![];
     let mut accounts: HashMap<AccountId, NEP141Wei> = HashMap::new();
-    let mut accounts_counter: u64 = 0;
     let mut contract_data: FungibleToken = FungibleToken::default();
 
     for result_value in &json_data.result.values {
@@ -104,27 +85,17 @@ pub fn parse<P: AsRef<Path>>(json_file: P, output: Option<P>) -> anyhow::Result<
                 contract_data = FungibleToken::try_from_slice(&val)
                     .map_err(|e| anyhow::anyhow!("Failed parse contract data, {e}"))?;
             }
-            KeyType::Statistic => {
-                let val = base64::decode(&result_value.value)
-                    .map_err(|e| anyhow::anyhow!("Failed get account counter, {e}"))?;
-                accounts_counter = read_u64(&val);
-            }
             KeyType::Unknown => anyhow::bail!("Unknown key type"),
         }
     }
     println!("Proofs: {}", proofs.len());
     println!("Accounts: {}", accounts.len());
-    assert_eq!(
-        accounts.len() as u64,
-        accounts_counter,
-        "Wrong accounts count"
-    );
+
     // Store result data
     println!("Result file: {result_file_name:?}");
     StateData {
         contract_data,
         accounts,
-        accounts_counter,
         proofs,
     }
     .try_to_vec()
@@ -143,8 +114,6 @@ fn key_type(key: &[u8]) -> KeyType {
         KeyType::Accounts(value)
     } else if key == get_contract_key() {
         KeyType::Contract
-    } else if key == get_statistic_key() {
-        KeyType::Statistic
     } else {
         KeyType::Unknown
     }

@@ -2,7 +2,7 @@ use crate::rpc::{Client, REQUEST_TIMEOUT};
 use aurora_engine_migration_tool::{FungibleToken, StateData};
 use aurora_engine_types::types::NEP141Wei;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
-use near_sdk::json_types::{U128, U64};
+use near_sdk::json_types::U128;
 use near_sdk::{AccountId, Balance, StorageUsage};
 use serde_json::json;
 use std::collections::HashMap;
@@ -30,7 +30,6 @@ pub struct MigrationInputData {
     pub accounts: HashMap<AccountId, Balance>,
     pub total_supply: Option<Balance>,
     pub account_storage_usage: Option<StorageUsage>,
-    pub statistics_aurora_accounts_counter: Option<u64>,
     pub used_proofs: Vec<String>,
 }
 
@@ -153,7 +152,6 @@ impl Migration {
                 accounts: HashMap::new(),
                 total_supply: None,
                 account_storage_usage: None,
-                statistics_aurora_accounts_counter: None,
                 used_proofs: proofs,
             }
             .try_to_vec()?;
@@ -188,7 +186,6 @@ impl Migration {
                 accounts: accounts.clone(),
                 total_supply: None,
                 account_storage_usage: None,
-                statistics_aurora_accounts_counter: None,
                 used_proofs: vec![],
             }
             .try_to_vec()
@@ -209,7 +206,6 @@ impl Migration {
             accounts: HashMap::new(),
             total_supply: Some(self.data.contract_data.total_eth_supply_on_near.as_u128()),
             account_storage_usage: Some(self.data.contract_data.account_storage_usage),
-            statistics_aurora_accounts_counter: Some(self.data.accounts_counter),
             used_proofs: vec![],
         }
         .try_to_vec()
@@ -262,14 +258,8 @@ impl Migration {
                 account_storage_usage: 0,
             },
             accounts: HashMap::new(),
-            accounts_counter: 0,
             proofs: vec![],
         };
-
-        let data = rpc
-            .request_view(AURORA_CONTRACT, "get_accounts_counter".to_string(), vec![])
-            .await?;
-        migration_data.accounts_counter = U64::try_from_slice(&data).unwrap().0;
 
         let data = rpc
             .request_view(AURORA_CONTRACT, "ft_total_supply".to_string(), vec![])
@@ -300,7 +290,6 @@ impl Migration {
 
         println!("Proofs: {:?}", migration_data.proofs.len());
         println!("Accounts: {:?}", migration_data.accounts.len());
-        println!("Accounts counter: {:?}", migration_data.accounts_counter);
         println!(
             "Total supply: {:?}",
             migration_data

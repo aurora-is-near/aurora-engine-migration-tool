@@ -32,6 +32,5 @@ pub struct FungibleToken {
 pub struct StateData {
     pub contract_data: FungibleToken,
     pub accounts: HashMap<AccountId, NEP141Wei>,
-    pub accounts_counter: u64,
     pub proofs: Vec<String>,
 }
