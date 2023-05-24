@@ -18,8 +18,8 @@ run: build-mainnet-release
 migrate-testnet: build-testnet-release
 	@${BIN} migrate --account ${ACCOUNT_ID} --key ${ACCOUNT_KEY} --file contract_state.borsh
 
-migrate-testnet-indexed: build-testnet-release
-	@${BIN} migrate --account ${ACCOUNT_ID} --key ${ACCOUNT_KEY} --file for-migtation.borsh
+migrate-mainnet: build-mainnet-release
+	@${BIN} migrate --account ${ACCOUNT_ID} --key ${ACCOUNT_KEY} --file contract_state.borsh
 
 build-index-archival:
 	@cargo build --release --features mainnet-archival

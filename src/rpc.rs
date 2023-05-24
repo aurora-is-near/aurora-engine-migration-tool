@@ -36,13 +36,17 @@ pub const AURORA_CONTRACT: &str = "aurora";
 /// How many retries per success request
 const RETRIES_COUNT: u8 = 10;
 
-/// Transaction action method, allowed for output parsing
+/// Transaction action methods allowed for output parsing and
+/// get `predecessor_account_id`
 const ACTION_METHODS: &[&str] = &[
     "ft_transfer",
     "deposit",
     "ft_transfer_call",
     "withdraw",
     "finish_deposit",
+    "storage_deposit",
+    "storage_withdraw",
+    "storage_unregister",
 ];
 
 pub struct Client {
@@ -129,7 +133,7 @@ impl Client {
                 let mut msg = "Failed get block".to_string();
                 if let BlockKind::Height(height) = bloch_kind {
                     self.unresolved_blocks.insert(height);
-                    msg = format!("{}: {:?}", msg, height);
+                    msg = format!("{msg}: {height:?}");
                 }
                 print_log(&msg);
                 e
@@ -171,6 +175,20 @@ impl Client {
     }
 
     /// Parse action arguments and return accounts and proof keys
+    /// Main goal is gather all accounts that can be modified.
+    /// In `aurora-eth-connector` migration just receive balances
+    /// for modified accounts. So main goals is just catch modified
+    /// accounts, and proof-key for `finish_deposit`.
+    ///
+    /// `deposit` function catch just for log information.
+    ///
+    /// `withdraw` function catch also for information, the `sender_id`
+    /// is from `predecessor_account_id` that we catch early in main flow.
+    ///
+    /// `storage_withdraw` - do nothing with account, just for logs.
+    ///
+    /// `storage_unregister` - use `predecessor_account_id` (that catch in
+    /// other flow), just for log.
     #[must_use]
     pub fn parse_action_argument(
         &self,
@@ -237,12 +255,44 @@ impl Client {
                 print_log("deposit");
                 (vec![], None)
             }
+            "storage_deposit" => {
+                #[derive(Debug, Clone, Deserialize)]
+                pub struct StorageDepositArgs {
+                    pub account_id: Option<AccountId>,
+                    pub registration_only: Option<bool>,
+                }
+                if let Ok(res) = serde_json::from_slice::<StorageDepositArgs>(args) {
+                    print_log("storage_deposit");
+                    if let Some(account_id) = res.account_id {
+                        (vec![account_id], None)
+                    } else {
+                        (vec![], None)
+                    }
+                } else {
+                    print_log("Failed deserialize FinishDepositArgs");
+                    (vec![], None)
+                }
+            }
+            "storage_withdraw" => {
+                print_log("storage_withdraw");
+                (vec![], None)
+            }
+            "storage_unregister" => {
+                print_log("storage_unregister");
+                (vec![], None)
+            }
             _ => (vec![], None),
         }
     }
 
     /// Get transactions and receipts indexed data from chunks.
     /// Return indexed data including actions log.
+    ///
+    /// Special notice to catch `predecessor_account_id`:
+    /// It's especially important
+    /// for `withdraw`, `ft_transfer`, `ft_transfer_call`
+    /// and all `storage_deposit`,`storage_withdraw`,
+    /// `storage_unregister`.
     pub async fn get_chunk_indexed_data(
         &mut self,
         chunks: Vec<ChunkHeaderView>,
@@ -257,7 +307,7 @@ impl Client {
         // Fetch all chunks from block
         for chunk in chunks {
             // Get chunk data
-            let chunk_data = if let Ok(chunk_data) = self
+            let Ok(chunk_data) = self
                 .call(methods::chunk::RpcChunkRequest {
                     chunk_reference:
                         near_jsonrpc_primitives::types::chunks::ChunkReference::ChunkHash {
@@ -265,9 +315,7 @@ impl Client {
                         },
                 })
                 .await
-            {
-                chunk_data
-            } else {
+            else {
                 print_log("Failed get chunk");
                 // Set block as unresolved
                 self.unresolved_blocks.insert(block_height);
@@ -282,7 +330,11 @@ impl Client {
                 }
                 // Get actions and proof keys from transaction
                 let res = self.get_actions_data(tx.actions.clone());
-                // Added predecessor account
+
+                // Added predecessor account. It's especially important
+                // for `withdraw`, `ft_transfer`, `ft_transfer_call`
+                // and all `storage_deposit`,`storage_withdraw`,
+                // `storage_unregister`
                 if res.is_action_found {
                     results
                         .accounts
@@ -322,7 +374,9 @@ impl Client {
                 } = receipt.receipt.clone()
                 {
                     let res = self.get_actions_data(actions);
-                    // Added predecessor account
+                    // Added predecessor_account_id.
+                    // NOTE: same notice as before about importance
+                    // for that field.
                     if res.is_action_found {
                         results
                             .accounts
@@ -429,14 +483,14 @@ impl Client {
                 .client
                 .call(&request)
                 .await
-                .map_err(|err| CommitTx::Commit(format!("{:?}", err)));
+                .map_err(|err| CommitTx::Commit(format!("{err:?}")));
             // Check response and set errors if it needs
             if let Ok(tx_res) = res {
                 // If success - check response status
                 match tx_res.status {
                     FinalExecutionStatus::SuccessValue(_) => return Ok(()),
                     FinalExecutionStatus::Failure(err) => {
-                        res = Err(CommitTx::Status(format!("{:?}", err)));
+                        res = Err(CommitTx::Status(format!("{err:?}")));
                     }
                     _ => res = Err(CommitTx::Status("Other".to_string())),
                 }
@@ -444,13 +498,11 @@ impl Client {
 
             // If request failed for some reason - retry request
             retry += 1;
-            println!("\nRequest retry: {:?}", retry);
+            println!("\nRequest retry: {retry:?}");
             // If all retries failed it's incident, just panic
             assert!(
                 retry <= RETRIES_COUNT,
-                "Failed commit tx {:?} times: {:?}",
-                RETRIES_COUNT,
-                res
+                "Failed commit tx {RETRIES_COUNT:?} times: {res:?}",
             );
         }
     }
@@ -515,9 +567,9 @@ mod error {
         fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
             match self {
                 Self::AccessKey => write!(f, "ERR_FAILED_GET_ACCESS_KEY"),
-                Self::Commit(msg) => write!(f, "ERR_FAILED_COMMIT_TX: {}", msg),
+                Self::Commit(msg) => write!(f, "ERR_FAILED_COMMIT_TX: {msg}"),
                 Self::View => write!(f, "ERR_FAILED_VIEW_TX"),
-                Self::Status(msg) => write!(f, "ERR_TX_STATUS_FAIL: {}", msg),
+                Self::Status(msg) => write!(f, "ERR_TX_STATUS_FAIL: {msg}"),
             }
         }
     }
