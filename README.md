@@ -14,7 +14,7 @@ to the new [aurora-eth-connector](https://github.com/aurora-is-near/aurora-eth-c
 ### The set of tools includes
 
 - `parser` - parse for Aurora Engine state snapshot
-- `indexer` - indexing NEAR blockchain blocks for Aurora Engine contract
+- `indexer` - indexing NEAR blockchain blocks which include transactions of Aurora Engine contract
 - `prepare-migrate-indexed` - prepare data for migration from indexed data
 - `migration` - migrate Aurora Engine contract NEP-141 state to `aurora-eth-connector` contract.
 - `CLI` - commands and parameters to interact with the application.
