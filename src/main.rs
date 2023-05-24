@@ -51,15 +51,15 @@ async fn main() -> anyhow::Result<()> {
                 ),
         )
         .subcommand(
-            Command::new("prepare-migrate-indexed")
-                .about("migrate indexed data")
+            Command::new("prepare-for-migration")
+                .about("Prepare parsed or indexed data for migration. Should be invoked befor migration")
                 .arg(
-                    arg!(-f --file <FILE> "File with indexed data")
+                    arg!(-f --file <FILE> "File with parsed or indexed data serialized with borsh")
                         .required(true)
                         .value_parser(value_parser!(PathBuf)),
                 )
                 .arg(
-                    arg!(-o --output <FILE> "Output file with migration results data")
+                    arg!(-o --output <FILE> "Output file with migration results data serialized with borsh")
                         .required(true)
                         .value_parser(value_parser!(PathBuf)),
                 ),

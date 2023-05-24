@@ -19,6 +19,23 @@ to the new [aurora-eth-connector](https://github.com/aurora-is-near/aurora-eth-c
 - `migration` - migrate Aurora Engine contract NEP-141 state to `aurora-eth-connector` contract.
 - `CLI` - commands and parameters to interact with the application.
 
+# Common migration flow
+
+1. Run migration-tool `indexer`.
+2. Run getting snapshot from Aurora contract. It can take more than 2 hours.
+3. After snapshot is ready, pause (set to **read-only** mod) Aurora contract and Bridge.
+4. Deploy new `aurora-engine` contract with `Splitting NEP-141` functionality.
+5. Deploy `aurora-eth-connector`.
+6. Run migration-tool `parse` for snapshot file.
+7. Run migration-tool `prepare-for-migration` for parsed Aurora state result data (for ex: `migration_state.borsh`).
+8. Stop migration-tool `indexer`
+9. Run migration-tool `prepare-for-migration` for indexed result data (for ex: `migration_indexed.borsh`).
+10. Run migration-tool `migrate` for previously generated `migration_state.borsh`.
+11. Run migration-tool `migrate` for previously generated `migration_indexed.borsh`.
+12. Run migration-tool `migrate` with check correctness command for `migration_state.borsh`.
+13. Run migration-tool `migrate` with check correctness command for `migration_indexed.borsh`.
+14. Unpause Aurora contract and Bridge.
+
 # How it works
 
 ## Parser
@@ -56,6 +73,15 @@ Example:
 $ aurora-engine-migration-tool parse --file engine-snaphot-2023-05-03-120132.json -o result_file.borsh
 ```
 
+**IMPORTANT NOTICE**: the data that the parsing operation returns is 
+not suitable for migration. Therefore, the command `prepare-for-migration` must be called 
+before the migration. This will receive from the Aurora contract 
+the current state of the accounts - their balances. And it is 
+important to note that the Aurora contract must be on pause and in 
+the READ ONLY status. Those. its state does not change. This ensures 
+that correct data is received. Therefore, before migration, the 
+operation of `prepare-for-migration` is mandatory.
+
 
 ## Indexer
 
@@ -77,7 +103,7 @@ standard):
 - `storage_withdraw` - parsed only `predecessor_id`. Gather only accounts.
 - `storage_unregister` - parsed only `predecessor_id`. Gather only accounts.
 
-**IMPORTANT NOTICE** We need only accounts without balances (balances 
+**IMPORTANT NOTICE**: we need only accounts without balances (balances 
 will be received with the command `prepare-migrate-indexed`), and proof 
 data. You **MUST** run the command `prepare-migrate-indexed` after 
 indexing data.
@@ -97,11 +123,49 @@ Options:
 ```
 
 
-## Prepare indexed data for migration
+## Prepare data for migration
 
+Data received after parsing or indexing is
+not suitable for migration. Therefore, the command `prepare-for-migration` must be called
+before the migration. This command receive from the Aurora contract
+the current state of the accounts - their balances. And it is
+important to note that the Aurora contract must be on pause and in
+the READ ONLY status. Those. its state does not change. This ensures
+that correct data is received. Therefore, before migration, the
+operation of `prepare-for-migration` is mandatory.
+
+```
+Prepare parsed or indexed data for migration. Should be invoked befor migration
+
+Usage: aurora-engine-migration-tool prepare-for-migration --file <FILE> --output <FILE>
+
+Options:
+  -f, --file <FILE>    File with parsed or indexed data serialized with borsh
+  -o, --output <FILE>  Output file with migration results data serialized with borsh
+  -h, --help           Print help
+```
+
+Example:
+
+```
+$ aurora-engine-migration-tool prepare-for-migration --file indexed_data.borsh --output data_for_migration.borsh 
+```
 
 
 ## Migration
+
+**IMPORTANT NOTICE**: there is no need to generate 
+special data that relates to the NEP-141 `storage_deposit` 
+function, since the deposit of the storage occurs 
+through the attachment of tokens during the transaction for 
+`storage_deposit`. Accordingly, there is no information about this. 
+Those. we just need to know the account values for these functions from 
+arguments and `predecessor_id`. For `storage_withdraw` - this function
+do nothing with account. `storage_unregister` just delete account,
+but we still need to know it, because we can store just zero balance.
+`storage_unregister` just remove account entity and costs nothing. In 
+`aurora-eth-connector` context the deleted entity and account with zero balance
+has same sense.
 
 Parameters:
 - `--account` - contract name for migration. Ex: `some-acc.testnet`.
