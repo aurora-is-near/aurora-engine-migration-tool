@@ -53,7 +53,7 @@ are not significant.
 balances, as well as deposit proofs from the `Aurora Engine` contract 
 to the new `aurora-eth-connector` contract. And in this case, parsing 
 `Aurora Engine` state snapshot collects the necessary data and writes 
-it to the resulting file, serializing it using `borsh`.
+it to the resulting file. The collected data is serialized by `borsh`.
 
 ```
 Parse Aurora Engine contract state snapshot and store result to file serialized with borsh
