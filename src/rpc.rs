@@ -36,7 +36,7 @@ pub const AURORA_CONTRACT: &str = "aurora";
 /// How many retries per success request
 const RETRIES_COUNT: u8 = 10;
 
-/// Transaction action method, allowed for output parsing and
+/// Transaction action methods allowed for output parsing and
 /// get `predecessor_account_id`
 const ACTION_METHODS: &[&str] = &[
     "ft_transfer",
