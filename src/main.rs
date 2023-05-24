@@ -21,7 +21,7 @@ async fn main() -> anyhow::Result<()> {
                         .value_parser(value_parser!(PathBuf)),
                 )
                 .arg(
-                    arg!(-o --output <FILE> "Output file with results data serialized with  borsh")
+                    arg!(-o --output <FILE> "Output file with results data serialized with borsh")
                         .required(false)
                         .value_parser(value_parser!(PathBuf)),
                 ),
