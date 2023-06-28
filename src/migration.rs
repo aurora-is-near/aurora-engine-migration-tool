@@ -40,7 +40,6 @@ pub enum MigrationCheckResult {
     AccountAmount(HashMap<AccountId, Balance>),
     TotalSupply(Balance),
     StorageUsage(StorageUsage),
-    StatisticsCounter(u64),
     Proof(Vec<String>),
 }
 
@@ -120,9 +119,6 @@ impl Migration {
                     println!("{msg} [Missed field: {correctness:?}]");
                 }
                 if let MigrationCheckResult::StorageUsage(_) = correctness {
-                    println!("{msg} [Missed field: {correctness:?}]");
-                }
-                if let MigrationCheckResult::StatisticsCounter(_) = correctness {
                     println!("{msg} [Missed field: {correctness:?}]");
                 }
             }
