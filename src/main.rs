@@ -13,7 +13,7 @@ async fn main() -> anyhow::Result<()> {
     let matches = command!()
         .subcommand_required(true)
         .subcommand(
-            Command::new("parser")
+            Command::new("parse")
                 .about("Parse Aurora Engine contract state snapshot and store result to file serialized with borsh")
                 .arg(
                     arg!(-f --file <FILE> "Aurora Engine snapshot json file")
