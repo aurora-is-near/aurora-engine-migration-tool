@@ -69,9 +69,10 @@ pub fn parse<P: AsRef<Path>>(json_file: P, output: Option<P>) -> anyhow::Result<
             KeyType::Accounts(value) => {
                 let account_str = std::str::from_utf8(&value)
                     .map_err(|e| anyhow::anyhow!("Failed parse account to str, {e}"))?;
-                let account = AccountId::from_str(account_str)
-                    .map_err(|e| anyhow::anyhow!("Failed parse account, {e} for {account_str}"))?;
-
+                let Ok(account) = AccountId::from_str(account_str) else {
+                    println!("\tNot fetched account: {account_str}");
+                    continue;
+                };
                 let account_balance = NEP141Wei::try_from_slice(
                     &base64::decode(&result_value.value)
                         .map_err(|e| anyhow::anyhow!("Failed get account balance, {e}"))?,
