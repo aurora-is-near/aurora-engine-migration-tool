@@ -1,20 +1,17 @@
 use aurora_engine_migration_tool::{BlockData, FungibleToken, StateData};
-use aurora_engine_types::storage::{EthConnectorStorageId, KeyPrefix, VersionPrefix};
+use aurora_engine_types::storage::{bytes_to_key, EthConnectorStorageId, KeyPrefix};
 use aurora_engine_types::types::NEP141Wei;
 use near_sdk::borsh::{BorshDeserialize, BorshSerialize};
 use near_sdk::AccountId;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 enum KeyType {
     Accounts(Vec<u8>),
     Contract,
     Proof(Vec<u8>),
     Unknown,
-}
-
-pub fn bytes_to_key(prefix: KeyPrefix, bytes: &[u8]) -> Vec<u8> {
-    [&[u8::from(VersionPrefix::V1)], &[u8::from(prefix)], bytes].concat()
 }
 
 pub fn construct_contract_key(suffix: EthConnectorStorageId) -> Vec<u8> {
@@ -70,8 +67,12 @@ pub fn parse<P: AsRef<Path>>(json_file: P, output: Option<P>) -> anyhow::Result<
                 proofs.push(proof);
             }
             KeyType::Accounts(value) => {
-                let account = AccountId::try_from_slice(value.as_slice())
-                    .map_err(|e| anyhow::anyhow!("Failed parse account, {e}"))?;
+                let account_str = std::str::from_utf8(&value)
+                    .map_err(|e| anyhow::anyhow!("Failed parse account to str, {e}"))?;
+                let Ok(account) = AccountId::from_str(account_str) else {
+                    println!("\tNot fetched account: {account_str}");
+                    continue;
+                };
                 let account_balance = NEP141Wei::try_from_slice(
                     &base64::decode(&result_value.value)
                         .map_err(|e| anyhow::anyhow!("Failed get account balance, {e}"))?,
@@ -85,7 +86,7 @@ pub fn parse<P: AsRef<Path>>(json_file: P, output: Option<P>) -> anyhow::Result<
                 contract_data = FungibleToken::try_from_slice(&val)
                     .map_err(|e| anyhow::anyhow!("Failed parse contract data, {e}"))?;
             }
-            KeyType::Unknown => anyhow::bail!("Unknown key type"),
+            KeyType::Unknown => (), //anyhow::bail!("Unknown key type"),
         }
     }
     println!("Proofs: {}", proofs.len());
