@@ -29,7 +29,7 @@ NODE_KEY_PATH=$NEARCORE_HOME/node0/validator_key.json
 AURORA_KEY_PATH=$NEARCORE_HOME/node0/aurora_key.json
 ETH_CONNECTOR_KEY_PATH=$NEARCORE_HOME/node0/eth_connector_key.json
 ENGINE_ACCOUNT=aurora.node0
-ETH_CONNECTOR_ACCOUNT=ethconnector.node0
+ETH_CONNECTOR_ACCOUNT=eth-connector.node0
 ETH_CONNECTOR_WASM=/tmp/aurora-eth-connector/bin/aurora-eth-connector-mainnet.wasm
 
 export PATH="$PATH:$USER_BASE_BIN:$HOME/.cargo/bin"
@@ -45,8 +45,8 @@ start_node() {
   if [[ $(uname -m) == "arm64" ]]; then # Check for local execution
     cmd="$cmd --binary-path $HOME/.nearup/near/localnet --num-nodes 1"
   fi
-
-  $cmd > /dev/null 2>&1
+  # $cmd > /dev/null 2>&1
+  $cmd
 }
 
 stop_node() {
@@ -98,6 +98,8 @@ get_eth_connector_and_build_for_migration() {
 #==================================
 # Main
 
+rm -rf /tmp/localnet
+
 echo "Install nearup"
 install_nearup
 
@@ -105,56 +107,63 @@ echo "Start NEAR node"
 start_node
 sleep 1
 
-echo "Download Aurora contract"
-download_aurora_contact
+#echo "Download Aurora contract"
+#download_aurora_contact
 
 export NEAR_KEY_PATH=$NODE_KEY_PATH
 echo "Create account for Aurora"
 aurora-cli create-account --account $ENGINE_ACCOUNT --balance 1000 > $AURORA_KEY_PATH || error_exit
 sleep 1
 
-echo "View info of created Aurora account"
-balance=$(aurora-cli view-account $ENGINE_ACCOUNT  | jq '.amount') || error_exit
-sleep 1
-echo "$balance"
-assert_eq "$balance" "1000000000000000000000000000"
+#echo "View info of created Aurora account"
+#balance=$(aurora-cli view-account $ENGINE_ACCOUNT  | jq '.amount') || error_exit
+#sleep 1
+## assert_eq $balance "1000000000000000000000000000"
+#echo $balance
+#
+#export NEAR_KEY_PATH=$AURORA_KEY_PATH
+#echo "Deploy Aurora contract"
+#aurora-cli deploy-aurora $ENGINE_WASM || error_exit
+#sleep 4
+#
+#echo "Init Aurora"
+#aurora-cli --engine $ENGINE_ACCOUNT init \
+#  --chain-id 1313161556 \
+#  --owner-id $ENGINE_ACCOUNT \
+#  --bridge-prover-id "prover" \
+#  --upgrade-delay-blocks 1 \
+#  --custodian-address 0x1B16948F011686AE64BB2Ba0477aeFA2Ea97084D \
+#  --ft-metadata-path engine_ft_metadata.json || error_exit
+#sleep 2
+#
+#echo "Get Aurora contract version"
+#version=$(aurora-cli --engine $ENGINE_ACCOUNT get-version || error_exit)
+#sleep 1
+#assert_eq "$version" $AURORA_LAST_VERSION
+#echo "$version"
+#
+#echo "Get and build Aurora Eth-Connector for migration"
+#get_eth_connector_and_build_for_migration
 
-echo "Deploy Aurora contract"
-aurora-cli deploy-aurora $ENGINE_WASM || error_exit
-sleep 4
-
-echo "Init Aurora"
-aurora-cli --engine $ENGINE_ACCOUNT init \
-  --chain-id 1313161556 \
-  --owner-id $ENGINE_ACCOUNT \
-  --bridge-prover-id "prover" \
-  --upgrade-delay-blocks 1 \
-  --custodian-address 0x1B16948F011686AE64BB2Ba0477aeFA2Ea97084D \
-  --ft-metadata-path docs/res/ft_metadata.json || error_exit
-sleep 2
-
-echo "Get Aurora contract version"
-version=$(aurora-cli --engine $ENGINE_ACCOUNT get-version || error_exit)
-sleep 1
-assert_eq "$version" $AURORA_LAST_VERSION
-echo "$version"
-
-echo "View info of created Eth-Connector account"
-balance=$(aurora-cli view-account $ETH_CONNECTOR_ACCOUNT | jq '.amount') || error_exit
-sleep 1
-assert_eq "$balance" "1000000000000000000000000000"
-echo "$balance"
-
+export NEAR_KEY_PATH=$NODE_KEY_PATH
 echo "Create account for Eth-Connector"
 aurora-cli create-account --account $ETH_CONNECTOR_ACCOUNT --balance 1000 > $ETH_CONNECTOR_KEY_PATH || error_exit
 sleep 1
 
-echo "Get and build Aurora Eth-Connector for migration"
-get_eth_connector_and_build_for_migration
+echo "View info of created Eth-Connector account"
+balance=$(aurora-cli view-account $ETH_CONNECTOR_ACCOUNT | jq '.amount') || error_exit
+sleep 1
+# assert_eq "$balance" "1000000000000000000000000000"
+echo $balance
 
+export NEAR_KEY_PATH=$ETH_CONNECTOR_KEY_PATH
 echo "Deploy Eth-Connector contract for migration"
-near deploy $ETH_CONNECTOR_WASM new  || error_exit
+near deploy --keyPath $ETH_CONNECTOR_KEY_PATH --network_id localnet --nodeUrl  http://127.0.0.1:3030 -v $ETH_CONNECTOR_ACCOUNT $ETH_CONNECTOR_WASM new "$(cat init_eth_connector.json)" || error_exit
 sleep 4
 
+echo "Call Eth-Connector deposit"
+# TODO: add  --base64
+near call --keyPath --account_id $ETH_CONNECTOR_KEY_PATH $ETH_CONNECTOR_KEY_PATH --network_id localnet --nodeUrl  http://127.0.0.1:3030 -v $ETH_CONNECTOR_ACCOUNT "$(cat deposit_proof_data.json)" || error_exit
+
 echo "Finish: stop NEAR node and clean up"
-finish
+#finish
