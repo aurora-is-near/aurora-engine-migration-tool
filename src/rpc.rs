@@ -24,6 +24,9 @@ const NEAR_RPC_ADDRESS: &str = near_jsonrpc_client::NEAR_MAINNET_ARCHIVAL_RPC_UR
 #[cfg(feature = "testnet")]
 const NEAR_RPC_ADDRESS: &str = near_jsonrpc_client::NEAR_TESTNET_RPC_URL;
 
+#[cfg(feature = "localnet")]
+const NEAR_RPC_ADDRESS: &str = "http://127.0.0.1:3030";
+
 /// NEAR-RPC has limits: 600 req/sec, so we need timeout per requests
 pub const REQUEST_TIMEOUT: Duration = Duration::from_millis(90);
 

@@ -1,6 +1,6 @@
 [package]
 name = "aurora-engine-migration-tool"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Aurora Labs <hello@aurora.dev>", "Evgeny Ukhanov <evgeny@aurora.dev>"]
 edition = "2021"
 description = "Aurora Engine migration tools"
@@ -31,5 +31,6 @@ libc = "0.2"
 [features]
 mainnet = ["log"]
 testnet = ["log"]
+localnet = ["log"]
 mainnet-archival = ["log"]
 log = []

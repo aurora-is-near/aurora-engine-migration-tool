@@ -51,8 +51,8 @@ async fn main() -> anyhow::Result<()> {
                 ),
         )
         .subcommand(
-            Command::new("prepare-for-migration")
-                .about("Prepare parsed or indexed data for migration. Should be invoked befor migration")
+            Command::new("prepare-migrate-indexed")
+                .about("Prepare indexed data for migration. Should be invoked before migration")
                 .arg(
                     arg!(-f --file <FILE> "File with parsed or indexed data serialized with borsh")
                         .required(true)

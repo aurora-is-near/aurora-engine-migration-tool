@@ -93,7 +93,6 @@ pub fn parse<P: AsRef<Path>>(json_file: P, output: Option<P>) -> anyhow::Result<
     println!("Accounts: {}", accounts.len());
 
     // Store result data
-    println!("Result file: {result_file_name:?}");
     StateData {
         contract_data,
         accounts,

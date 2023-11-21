@@ -13,7 +13,7 @@ to the new [aurora-eth-connector](https://github.com/aurora-is-near/aurora-eth-c
 
 ### The set of tools includes
 
-- `parser` - parse for Aurora Engine state snapshot
+- `parse` - parse for Aurora Engine state snapshot
 - `indexer` - indexing NEAR blockchain blocks which include transactions of Aurora Engine contract
 - `prepare-migrate-indexed` - prepare data for migration from indexed data
 - `migration` - migrate Aurora Engine contract NEP-141 state to `aurora-eth-connector` contract.
@@ -58,7 +58,7 @@ it to the resulting file. The collected data is serialized by `borsh`.
 ```
 Parse Aurora Engine contract state snapshot and store result to file serialized with borsh
 
-Usage: aurora-engine-migration-tool parser [OPTIONS] --file <FILE>
+Usage: aurora-engine-migration-tool parse [OPTIONS] --file <FILE>
 
 Options:
   -f, --file <FILE>    Aurora Engine snapshot json file
@@ -123,21 +123,21 @@ Options:
 ```
 
 
-## Prepare data for migration
+## Prepare data for migration after indexing
 
-Data received after parsing or indexing is
-not suitable for migration. Therefore, the command `prepare-for-migration` must be called
+Data received after indexing is
+not suitable for migration. Therefore, the command `prepare-migrate-indexed` must be called
 before the migration. This command receive from the Aurora contract
 the current state of the accounts - their balances. And it is
 important to note that the Aurora contract must be on pause and in
 the READ ONLY status. Those. its state does not change. This ensures
-that correct data is received. Therefore, before migration, the
-operation of `prepare-for-migration` is mandatory.
+that correct data is received. Therefore, before migration after indexing, the
+operation of `prepare-migrate-indexed` is mandatory.
 
 ```
-Prepare parsed or indexed data for migration. Should be invoked befor migration
+Prepare indexed data for migration. Should be invoked befor migration
 
-Usage: aurora-engine-migration-tool prepare-for-migration --file <FILE> --output <FILE>
+Usage: aurora-engine-migration-tool prepare-migrate-indexed --file <FILE> --output <FILE>
 
 Options:
   -f, --file <FILE>    File with parsed or indexed data serialized with borsh
@@ -148,7 +148,7 @@ Options:
 Example:
 
 ```
-$ aurora-engine-migration-tool prepare-for-migration --file indexed_data.borsh --output data_for_migration.borsh 
+$ aurora-engine-migration-tool prepare-migrate-indexed --file indexed_data.borsh --output data_for_migration.borsh 
 ```
 
 
@@ -180,8 +180,8 @@ $ aurora-engine-migration-tool migrate --account ${ACCOUNT_ID} --key ${ACCOUNT_K
 
 # Features flags
 
-This set of tools can be used for both NEAR `mainten` 
-and `testnet`. It is important to specify the 
+This set of tools can be used for both NEAR `mainten`, 
+`testnet` and `localnet`. It is important to specify the 
 appropriate flag explicitly.
 
 Available options:
@@ -189,6 +189,7 @@ Available options:
 - `mainnet` - NEAR mainnet.
 - `mainnet-archival` - NEAR mainnet-archival (after 250000 blocks from current RPC should call `archival` data).
 - `testnet` - NEAR testnet.
+- `localnet` - manually started NEAR localnet.
 - `log` - show log data in application output.
 
 
@@ -204,9 +205,20 @@ Available options:
 - `make index-fullstat` - build indexer and run full-stat command for indexer.
 - `index-stat`- build indexer and run short statistics for indexer.
 - `index-history` - build indexer and run indexing historical data.
-- `make prepare-migration` - build indexer and run data preparation with params:
+- `make prepare-migrate-indexed` - build indexer and run data preparation with params:
   - `-f data.borsh` - input prepared data (for example from indexer)
   - `-o for-migtation.borsh` - output file, that can be used to run migration.
 
+## Test via localnet
+
+To test very basic flow, it's useful to run test script for `NEAR localnet`.
+Please make sure that `python` and `pip` is installed.
+
+#### How to use test script
+
+```
+cd scripts
+./test_flow.sh
+```
 
 ### LICENSE: [CC0 1.0 Universal](LICENSE)

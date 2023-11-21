@@ -34,6 +34,7 @@ ETH_CONNECTOR_ACCOUNT=eth-connector.node0
 ETH_CONNECTOR_WASM=/tmp/aurora-eth-connector/bin/aurora-eth-connector-test.wasm
 PROOF="AQAAAAAAAAD9AAAA+PuUCW3pwriluMIs7jKJsQH2lg1o5R74QqDRQkOcJ44l2tmlB2bxU9Dj0te/K9FvwngcS9SUsrFanaAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAALigAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHgeAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABF0ZXN0X2FjY291bnQubmVhcgAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAA"
 GAS=300000000000000
+MIGRATION_TOOL=../target/release/aurora-engine-migration-tool
 
 export PATH="$PATH:$USER_BASE_BIN:$HOME/.cargo/bin"
 #==================================
@@ -43,12 +44,13 @@ install_nearup() {
 }
 
 start_node() {
+  rm -rf $NEARCORE_HOME
   cmd="nearup run localnet --home $NEARCORE_HOME"
 
   if [[ $(uname -m) == "arm64" ]]; then # Check for local execution
     cmd="$cmd --binary-path $HOME/.nearup/near/localnet --num-nodes 1"
   fi
-  # $cmd > /dev/null 2>&1
+  $cmd > /dev/null 2>&1
   $cmd
 }
 
@@ -60,7 +62,6 @@ finish() {
   echo "Stop NEAR node"
   stop_node
   echo "Cleanup"
-  rm -rf $NEARCORE_HOME
 
   if [[ -z "$1" ]]; then
     exit 0
@@ -74,7 +75,10 @@ error_exit() {
 }
 
 assert_eq() {
-  if [[ "$1" != "$2" ]]; then
+  a=$(echo "$1" | tr -d '"')
+  b=$(echo "$2" | tr -d '"')
+
+  if [[ "$a" != "$b" ]]; then
     echo "Unexpected result, should be $1 but actual is $2"
     finish 1
   fi
@@ -96,9 +100,15 @@ get_aurora_and_build() {
   rm -rf /tmp/aurora-connector
   git clone https://github.com/aurora-is-near/aurora-engine.git /tmp/aurora-connector  > /dev/null 2>&1
   cd /tmp/aurora-connector || error_exit
-  # cargo make --profile=mainnet build-test > /dev/null 2>&1
+  # cargo make --profile=mainnet build-migration > /dev/null 2>&1
   cargo make --profile=mainnet build-test
-  cd $curr_dir || error_exit
+  cd $curr_dir
+}
+
+build_migration_tool() {
+  cd ..
+  cargo build --features localnet --release > /dev/null 2>&1
+  cd scripts
 }
 
 get_eth_connector_and_build_for_migration() {
@@ -132,8 +142,6 @@ echo "Start NEAR node"
 start_node
 sleep 2
 
-#echo "Download Aurora contract"
-#download_aurora_contact
 echo "Get and build Aurora contract"
 # get_aurora_and_build
 
@@ -145,7 +153,7 @@ sleep 2
 echo "View info of created Aurora account"
 balance=$(aurora-cli view-account $ENGINE_ACCOUNT  | jq '.amount') || error_exit
 sleep 1
-# assert_eq $balance "1000000000000000000000000000"
+assert_eq "$balance" "1000000000000000000000000000"
 echo $balance
 
 export NEAR_KEY_PATH=$AURORA_KEY_PATH
@@ -170,12 +178,11 @@ assert_eq "$version" $AURORA_LAST_VERSION
 echo "$version"
 
 echo "Call Aurora deposit"
-near call $ENGINE_ACCOUNT deposit $PROOF --base64 --accountId $ENGINE_ACCOUNT --keyPath $AURORA_KEY_PATH --network_id localnet --nodeUrl  http://127.0.0.1:3030 -v --gas $GAS  || error_exit
+near call $ENGINE_ACCOUNT deposit $PROOF --base64 --accountId $ENGINE_ACCOUNT --keyPath $AURORA_KEY_PATH --network_id localnet --nodeUrl  http://127.0.0.1:3030 --gas $GAS > /dev/null || error_exit
 sleep 1
 
 echo "Get Aurora contract state"
 get_aurora_contract_state
-#near view-state $ENGINE_ACCOUNT --finality final --network_id localnet --nodeUrl  http://127.0.0.1:3030 > res_state.json
 
 echo "Get and build Aurora Eth-Connector for migration"
 get_eth_connector_and_build_for_migration
@@ -188,13 +195,26 @@ sleep 2
 echo "View info of created Eth-Connector account"
 balance=$(aurora-cli view-account $ETH_CONNECTOR_ACCOUNT | jq '.amount') || error_exit
 sleep 1
-# assert_eq $balance "1000000000000000000000000000"
+assert_eq $balance "1000000000000000000000000000"
 echo $balance
 
 export NEAR_KEY_PATH=$ETH_CONNECTOR_KEY_PATH
 echo "Deploy Eth-Connector contract for migration"
-near deploy --keyPath $ETH_CONNECTOR_KEY_PATH --network_id localnet --nodeUrl  http://127.0.0.1:3030 -v $ETH_CONNECTOR_ACCOUNT $ETH_CONNECTOR_WASM new "$(cat init_eth_connector.json)" || error_exit
+near deploy --keyPath $ETH_CONNECTOR_KEY_PATH --network_id localnet --nodeUrl  http://127.0.0.1:3030 $ETH_CONNECTOR_ACCOUNT $ETH_CONNECTOR_WASM new "$(cat init_eth_connector.json)" > /dev/null || error_exit
 sleep 4
+
+echo "Build migration tool"
+build_migration_tool
+
+echo "Parse Aurora contract state"
+$MIGRATION_TOOL parse -f res_state.json -o res_state.borsh
+
+echo "Migrate data to Eth-Connector"
+privkey=$(cat $ETH_CONNECTOR_KEY_PATH | jq '.private_key' | tr -d '"')
+echo "$privkey"
+$MIGRATION_TOOL migrate --file res_state.borsh --account "$ETH_CONNECTOR_ACCOUNT" --key "$privkey"
+
+# test_account.near
 
 echo "Finish: stop NEAR node and clean up"
 finish
