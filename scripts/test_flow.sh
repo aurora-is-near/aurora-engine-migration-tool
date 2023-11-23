@@ -54,6 +54,7 @@ finish() {
   echo "Stop NEAR node"
   stop_node
   echo "Cleanup"
+  rm -rf $NEARCORE_HOME
 
   if [[ -z "$1" ]]; then
     exit 0
@@ -124,8 +125,6 @@ get_aurora_contract_state() {
 
 #==================================
 # Main
-
-rm -rf /tmp/localnet
 
 echo "Install nearup"
 install_nearup
