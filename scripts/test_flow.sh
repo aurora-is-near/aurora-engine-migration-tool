@@ -12,20 +12,13 @@
 # 7. Manually check migration results
 
 #==================================
-# REQUIREMENTS
-# - ACCOUNT_ENGINE_ID env variable
-# - ACCOUNT_ETH_CONNECTOR_ID env variable
-# - ACCOUNT_ETH_CONNECTOR_PRIV_KEY env variable
-
-#==================================
 # Init variables
 export NEARCORE_HOME="/tmp/localnet"
 
 AURORA_LAST_VERSION="3.3.1"
 USER_BASE_BIN=$(python3 -m site --user-base)/bin
 ENGINE_LAST_WASM_URL="https://github.com/aurora-is-near/aurora-engine/releases/download/$AURORA_LAST_VERSION/aurora-mainnet.wasm"
-#ENGINE_WASM="/tmp/aurora-connector/bin/aurora-mainnet-test.wasm"
-ENGINE_WASM="/tmp/aurora-mainnet-test.wasm"
+ENGINE_WASM="/tmp/aurora-contract/target/wasm32-unknown-unknown/release/aurora_engine.wasm"
 NODE_KEY_PATH=$NEARCORE_HOME/node0/validator_key.json
 AURORA_KEY_PATH=$NEARCORE_HOME/node0/aurora_key.json
 ETH_CONNECTOR_KEY_PATH=$NEARCORE_HOME/node0/eth_connector_key.json
@@ -51,7 +44,6 @@ start_node() {
     cmd="$cmd --binary-path $HOME/.nearup/near/localnet --num-nodes 1"
   fi
   $cmd > /dev/null 2>&1
-  $cmd
 }
 
 stop_node() {
@@ -91,24 +83,24 @@ check_env_var() {
   fi
 }
 
-download_aurora_contact() {
+download_aurora_contract() {
   curl -sL $ENGINE_LAST_WASM_URL -o $ENGINE_WASM || error_exit
 }
 
 get_aurora_and_build() {
   curr_dir=$(pwd)
-  rm -rf /tmp/aurora-connector
-  git clone https://github.com/aurora-is-near/aurora-engine.git /tmp/aurora-connector  > /dev/null 2>&1
-  cd /tmp/aurora-connector || error_exit
-  # cargo make --profile=mainnet build-migration > /dev/null 2>&1
-  cargo make --profile=mainnet build-test
-  cd $curr_dir
+  rm -rf /tmp/aurora-contract
+  git clone https://github.com/aurora-is-near/aurora-engine.git /tmp/aurora-contract > /dev/null 2>&1
+  cd /tmp/aurora-contract || error_exit
+  # cargo make --profile=mainnet build-test > /dev/null 2>&1 || error_exit
+  RUSTFLAGS="-C link-arg=-s" cargo build --target wasm32-unknown-unknown --release --no-default-features --features=mainnet,integration-test -p aurora-engine -Z avoid-dev-deps > /dev/null 2>&1 || error_exit
+  cd $curr_dir || error_exit
 }
 
 build_migration_tool() {
   cd ..
-  cargo build --features localnet --release > /dev/null 2>&1
-  cd scripts
+  cargo build --features localnet --release > /dev/null 2>&1 || error_exit
+  cd scripts || error_exit
 }
 
 get_eth_connector_and_build_for_migration() {
@@ -116,7 +108,7 @@ get_eth_connector_and_build_for_migration() {
   rm -rf /tmp/aurora-eth-connector
   git clone https://github.com/aurora-is-near/aurora-eth-connector.git /tmp/aurora-eth-connector  > /dev/null 2>&1
   cd /tmp/aurora-eth-connector || error_exit
-  cargo make --profile=mainnet build-test > /dev/null 2>&1
+  cargo make --profile=mainnet build-test > /dev/null 2>&1 || error_exit
   cd $curr_dir || error_exit
 }
 
@@ -143,7 +135,7 @@ start_node
 sleep 2
 
 echo "Get and build Aurora contract"
-# get_aurora_and_build
+get_aurora_and_build
 
 export NEAR_KEY_PATH=$NODE_KEY_PATH
 echo "Create account for Aurora"
@@ -181,6 +173,9 @@ echo "Call Aurora deposit"
 near call $ENGINE_ACCOUNT deposit $PROOF --base64 --accountId $ENGINE_ACCOUNT --keyPath $AURORA_KEY_PATH --network_id localnet --nodeUrl  http://127.0.0.1:3030 --gas $GAS > /dev/null || error_exit
 sleep 1
 
+echo "Get deposited balance"
+near view $ENGINE_ACCOUNT ft_balance_of  '{"account_id": "test_account.near"}' --keyPath $AURORA_KEY_PATH --network_id localnet --nodeUrl  http://127.0.0.1:3030 || error_exit
+
 echo "Get Aurora contract state"
 get_aurora_contract_state
 
@@ -214,7 +209,8 @@ privkey=$(cat $ETH_CONNECTOR_KEY_PATH | jq '.private_key' | tr -d '"')
 echo "$privkey"
 $MIGRATION_TOOL migrate --file res_state.borsh --account "$ETH_CONNECTOR_ACCOUNT" --key "$privkey"
 
-# test_account.near
+echo "Get migrated balance"
+near view $ETH_CONNECTOR_ACCOUNT ft_balance_of  '{"account_id": "test_account.near"}' --keyPath $ETH_CONNECTOR_KEY_PATH --network_id localnet --nodeUrl  http://127.0.0.1:3030 || error_exit
 
 echo "Finish: stop NEAR node and clean up"
 finish
