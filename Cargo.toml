@@ -21,12 +21,15 @@ base64 = "0.20"
 near-jsonrpc-client = "0.6"
 near-jsonrpc-primitives = "0.17"
 near-primitives = "0.17"
-near-sdk = { git = "https://github.com/aurora-is-near/near-sdk-rs.git", tag = "v4.1.1-fix-deps" }
+near-sdk = "4.1"
 anyhow = "1.0"
 tokio = { version = "1", features = ["full"] }
 clap = { version = "4.0", features = ["cargo"] }
 near-crypto = "0.17"
 libc = "0.2"
+
+[patch.crates-io]
+near-sdk = { git = "https://github.com/aurora-is-near/near-sdk-rs.git", tag = "v4.1.1-fix-deps" }
 
 [features]
 mainnet = ["log"]
