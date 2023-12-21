@@ -1,6 +1,6 @@
 [package]
 name = "aurora-engine-migration-tool"
-version = "0.2.1"
+version = "0.2.2"
 authors = ["Aurora Labs <hello@aurora.dev>", "Evgeny Ukhanov <evgeny@aurora.dev>"]
 edition = "2021"
 description = "Aurora Engine migration tools"
@@ -13,7 +13,7 @@ publish = false
 autobenches = false
 
 [dependencies]
-aurora-engine-types = { git = "https://github.com/aurora-is-near/aurora-engine.git", branch = "develop", default-features = false, features = ["borsh-compat"] }
+aurora-engine-types = { git = "https://github.com/aurora-is-near/aurora-engine.git", tag = "3.5.0", default-features = false }
 serde = "1"
 serde_json = "1"
 serde_derive = "1"
@@ -34,3 +34,7 @@ testnet = ["log"]
 localnet = ["log"]
 mainnet-archival = ["log"]
 log = []
+
+[patch.crates-io]
+parity-secp256k1 = { git = 'https://github.com/paritytech/rust-secp256k1', rev = "d05fd8e" }
+near-sdk = { git = "https://github.com/aurora-is-near/near-sdk-rs.git", tag = "v4.1.1-fix-deps" }
