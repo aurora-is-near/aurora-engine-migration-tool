@@ -3,7 +3,7 @@ use aurora_engine_migration_tool::{FungibleToken, StateData};
 use aurora_engine_types::types::NEP141Wei;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::U128;
-use near_sdk::{AccountId, Balance, StorageUsage};
+use near_sdk::{AccountId, Balance};
 use serde_json::json;
 use std::collections::HashMap;
 use std::io::Write;
@@ -29,8 +29,6 @@ pub struct Migration {
 pub struct MigrationInputData {
     pub accounts: HashMap<AccountId, Balance>,
     pub total_supply: Option<Balance>,
-    pub account_storage_usage: Option<StorageUsage>,
-    pub used_proofs: Vec<String>,
 }
 
 #[derive(Debug, BorshSerialize, BorshDeserialize, Eq, PartialEq)]
@@ -39,8 +37,6 @@ pub enum MigrationCheckResult {
     AccountNotExist(Vec<AccountId>),
     AccountAmount(HashMap<AccountId, Balance>),
     TotalSupply(Balance),
-    StorageUsage(StorageUsage),
-    Proof(Vec<String>),
 }
 
 impl Migration {
@@ -101,9 +97,6 @@ impl Migration {
             .await?;
         let correctness = MigrationCheckResult::try_from_slice(&res).unwrap();
         match correctness {
-            MigrationCheckResult::Proof(missed) => {
-                println!("{msg}: {counter} [Missed: {:?}]", missed.len());
-            }
             MigrationCheckResult::AccountNotExist(missed) => {
                 println!("{msg}: {counter} [Missed: {:?}]", missed.len());
             }
@@ -114,13 +107,8 @@ impl Migration {
                 print!("\r{msg}: {counter} [{correctness:?}]");
                 std::io::stdout().flush()?;
             }
-            _ => {
-                if let MigrationCheckResult::TotalSupply(_) = correctness {
-                    println!("{msg} [Missed field: {correctness:?}]");
-                }
-                if let MigrationCheckResult::StorageUsage(_) = correctness {
-                    println!("{msg} [Missed field: {correctness:?}]");
-                }
+            MigrationCheckResult::TotalSupply(_) => {
+                println!("{msg} [Missed field: {correctness:?}]");
             }
         }
         Ok(())
@@ -131,44 +119,10 @@ impl Migration {
         // Data limit per transaction
         let limit = RECORDS_COUNT_PER_TX;
 
-        // Proofs migration
-        let mut i = 0;
-        let mut proofs_count = 0;
-        let mut reproducible_data_for_proofs: Vec<(Vec<u8>, usize)> = vec![];
-        loop {
-            let proofs = if i + limit >= self.data.proofs.len() {
-                &self.data.proofs[i..]
-            } else {
-                &self.data.proofs[i..i + limit]
-            }
-            .to_vec();
-
-            proofs_count += proofs.len();
-            let migration_data = MigrationInputData {
-                accounts: HashMap::new(),
-                total_supply: None,
-                account_storage_usage: None,
-                used_proofs: proofs,
-            }
-            .try_to_vec()?;
-            reproducible_data_for_proofs.push((migration_data.clone(), proofs_count));
-
-            self.commit_migration(migration_data, "Proofs", proofs_count)
-                .await?;
-
-            if i + limit >= self.data.proofs.len() {
-                break;
-            }
-
-            i += limit;
-        }
-        assert_eq!(proofs_count, self.data.proofs.len());
-        println!();
-
         // Accounts migration
         let mut accounts: HashMap<AccountId, Balance> = HashMap::new();
         let mut accounts_count = 0;
-        let mut reproducible_data_for_accounts: Vec<(Vec<u8>, usize)> = vec![];
+        let mut reproducible_data_for_accounts: Vec<(HashMap<AccountId, Balance>, usize)> = vec![];
 
         for (i, (account, amount)) in self.data.accounts.iter().enumerate() {
             accounts.insert(account.clone(), amount.as_u128());
@@ -178,18 +132,14 @@ impl Migration {
             }
             accounts_count += &accounts.len();
 
-            let migration_data = MigrationInputData {
-                accounts: accounts.clone(),
-                total_supply: None,
-                account_storage_usage: None,
-                used_proofs: vec![],
-            }
-            .try_to_vec()
-            .expect("Failed serialize");
-            reproducible_data_for_accounts.push((migration_data.clone(), accounts_count));
+            reproducible_data_for_accounts.push((accounts.clone(), accounts_count));
 
-            self.commit_migration(migration_data, "Accounts", accounts_count)
-                .await?;
+            self.commit_migration(
+                accounts.try_to_vec().expect("Failed serialize"),
+                "Accounts",
+                accounts_count,
+            )
+            .await?;
 
             // Clear
             accounts.clear();
@@ -201,8 +151,6 @@ impl Migration {
         let contract_migration_data = MigrationInputData {
             accounts: HashMap::new(),
             total_supply: Some(self.data.contract_data.total_eth_supply_on_near.as_u128()),
-            account_storage_usage: Some(self.data.contract_data.account_storage_usage),
-            used_proofs: vec![],
         }
         .try_to_vec()
         .expect("Failed serialize");
@@ -214,14 +162,15 @@ impl Migration {
         // Checking the correctness and integrity of data, regardless of
         // the migration process
 
-        println!("\n\n[Check correctness]");
-        for (migration_data, counter) in reproducible_data_for_proofs {
-            self.check_migration("Proofs", migration_data, counter)
-                .await?;
-        }
-
         println!();
-        for (migration_data, counter) in reproducible_data_for_accounts {
+        for (accounts, counter) in reproducible_data_for_accounts {
+            let migration_data = MigrationInputData {
+                accounts: accounts.clone(),
+                total_supply: None,
+            }
+            .try_to_vec()
+            .expect("Failed serialize");
+
             self.check_migration("Accounts:", migration_data, counter)
                 .await?;
         }
@@ -250,11 +199,8 @@ impl Migration {
             contract_data: FungibleToken {
                 total_eth_supply_on_near: NEP141Wei::new(0),
                 total_eth_supply_on_aurora: NEP141Wei::new(0),
-                // This value impossible to request from the contract
-                account_storage_usage: 0,
             },
             accounts: HashMap::new(),
-            proofs: vec![],
         };
 
         let data = rpc
@@ -280,11 +226,6 @@ impl Migration {
             tokio::time::sleep(REQUEST_TIMEOUT).await;
         }
 
-        for proof in indexer_data.data.proofs {
-            migration_data.proofs.push(proof);
-        }
-
-        println!("Proofs: {:?}", migration_data.proofs.len());
         println!("Accounts: {:?}", migration_data.accounts.len());
         println!(
             "Total supply: {:?}",
