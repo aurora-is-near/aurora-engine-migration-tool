@@ -49,6 +49,7 @@ pub fn parse<P: AsRef<Path>>(json_file: P, output: Option<P>) -> anyhow::Result<
 
     let mut accounts: HashMap<AccountId, NEP141Wei> = HashMap::new();
     let mut contract_data: FungibleToken = FungibleToken::default();
+    let mut total_stuck_supply = NEP141Wei::new(0);
 
     for result_value in &json_data.result.values {
         let key = base64::decode(&result_value.key)
@@ -58,15 +59,16 @@ pub fn parse<P: AsRef<Path>>(json_file: P, output: Option<P>) -> anyhow::Result<
             KeyType::Accounts(value) => {
                 let account_str = std::str::from_utf8(&value)
                     .map_err(|e| anyhow::anyhow!("Failed parse account to str, {e}"))?;
-                let Ok(account) = AccountId::from_str(account_str) else {
-                    println!("\tNot fetched account: {account_str}");
-                    continue;
-                };
                 let account_balance = NEP141Wei::try_from_slice(
                     &base64::decode(&result_value.value)
                         .map_err(|e| anyhow::anyhow!("Failed get account balance, {e}"))?,
                 )
                 .map_err(|e| anyhow::anyhow!("Failed parse account balance, {e}"))?;
+                let Ok(account) = AccountId::from_str(account_str) else {
+                    total_stuck_supply = total_stuck_supply + account_balance;
+                    println!("\tNot fetched account: {account_str} with balance {account_balance}");
+                    continue;
+                };
                 accounts.insert(account, account_balance);
             }
             KeyType::Contract => {
@@ -82,7 +84,8 @@ pub fn parse<P: AsRef<Path>>(json_file: P, output: Option<P>) -> anyhow::Result<
 
     // Store result data
     StateData {
-        contract_data,
+        total_supply: contract_data.total_eth_supply_on_near,
+        total_stuck_supply,
         accounts,
     }
     .try_to_vec()

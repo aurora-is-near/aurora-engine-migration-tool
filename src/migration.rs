@@ -1,5 +1,5 @@
 use crate::rpc::{Client, REQUEST_TIMEOUT};
-use aurora_engine_migration_tool::{FungibleToken, StateData};
+use aurora_engine_migration_tool::StateData;
 use aurora_engine_types::types::NEP141Wei;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::U128;
@@ -146,18 +146,6 @@ impl Migration {
         }
         assert_eq!(self.data.accounts.len(), accounts_count);
 
-        // Migrate Contract data
-        println!();
-        let contract_migration_data = MigrationInputData {
-            accounts: HashMap::new(),
-            total_supply: Some(self.data.contract_data.total_eth_supply_on_near.as_u128()),
-        }
-        .try_to_vec()
-        .expect("Failed serialize");
-
-        self.commit_migration(contract_migration_data.clone(), "Contract data", 1)
-            .await?;
-
         //=====================================
         // Checking the correctness and integrity of data, regardless of
         // the migration process
@@ -176,6 +164,14 @@ impl Migration {
         }
 
         println!();
+        let contract_migration_data = MigrationInputData {
+            accounts: HashMap::new(),
+            total_supply: Some(
+                self.data.total_supply.as_u128() - self.data.total_stuck_supply.as_u128(),
+            ),
+        }
+        .try_to_vec()
+        .expect("Failed serialize");
         self.check_migration("Contract data:", contract_migration_data, 1)
             .await?;
 
@@ -196,10 +192,8 @@ impl Migration {
         let rpc = Client::new();
 
         let mut migration_data = StateData {
-            contract_data: FungibleToken {
-                total_eth_supply_on_near: NEP141Wei::new(0),
-                total_eth_supply_on_aurora: NEP141Wei::new(0),
-            },
+            total_supply: NEP141Wei::new(0),
+            total_stuck_supply: NEP141Wei::new(0),
             accounts: HashMap::new(),
         };
 
@@ -207,7 +201,7 @@ impl Migration {
             .request_view(AURORA_CONTRACT, "ft_total_supply".to_string(), vec![])
             .await?;
         let total_supply: U128 = serde_json::from_slice(&data).unwrap();
-        migration_data.contract_data.total_eth_supply_on_near = NEP141Wei::new(total_supply.0);
+        migration_data.total_supply = NEP141Wei::new(total_supply.0);
 
         for account in indexer_data.data.accounts {
             let args = json!({ "account_id": account })
@@ -227,15 +221,46 @@ impl Migration {
         }
 
         println!("Accounts: {:?}", migration_data.accounts.len());
-        println!(
-            "Total supply: {:?}",
-            migration_data
-                .contract_data
-                .total_eth_supply_on_near
-                .as_u128()
-        );
+        println!("Total supply: {:?}", migration_data.total_supply.as_u128());
 
         migration_data
+            .try_to_vec()
+            .and_then(|data| std::fs::write(output, data))
+            .map_err(|e| anyhow::anyhow!("Failed save migration data, {e}"))
+    }
+
+    pub fn combine_indexed_and_state_data<P: AsRef<Path>>(
+        state: P,
+        indexed: P,
+        output: P,
+    ) -> anyhow::Result<()> {
+        let mut state_data = {
+            let data = std::fs::read(state)
+                .map_err(|e| anyhow::anyhow!("Failed read state data file, {e}"))?;
+            StateData::try_from_slice(&data)
+                .map_err(|e| anyhow::anyhow!("Failed deserialize state data, {e}"))?
+        };
+
+        let indexed_data = {
+            let data = std::fs::read(indexed)
+                .map_err(|e| anyhow::anyhow!("Failed read indexed data file, {e}"))?;
+            StateData::try_from_slice(&data)
+                .map_err(|e| anyhow::anyhow!("Failed deserialize indexed data, {e}"))?
+        };
+
+        for (account, balance) in indexed_data.accounts {
+            state_data.accounts.insert(account, balance);
+        }
+        state_data.total_supply = indexed_data.total_supply;
+
+        println!("Accounts: {:?}", state_data.accounts.len());
+        println!("Total supply: {:?}", state_data.total_supply.as_u128());
+        println!(
+            "Total stuck supply: {:?}",
+            state_data.total_stuck_supply.as_u128()
+        );
+
+        state_data
             .try_to_vec()
             .and_then(|data| std::fs::write(output, data))
             .map_err(|e| anyhow::anyhow!("Failed save migration data, {e}"))

@@ -29,6 +29,7 @@ pub struct FungibleToken {
 
 #[derive(Debug, Default, BorshSerialize, BorshDeserialize)]
 pub struct StateData {
-    pub contract_data: FungibleToken,
+    pub total_supply: NEP141Wei,
+    pub total_stuck_supply: NEP141Wei,
     pub accounts: HashMap<AccountId, NEP141Wei>,
 }

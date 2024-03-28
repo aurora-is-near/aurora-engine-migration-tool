@@ -30,11 +30,9 @@ to the new [aurora-eth-connector](https://github.com/aurora-is-near/aurora-eth-c
 7. Run migration-tool `prepare-for-migration` for parsed Aurora state result data (for ex: `migration_state.borsh`).
 8. Stop migration-tool `indexer`
 9. Run migration-tool `prepare-for-migration` for indexed result data (for ex: `migration_indexed.borsh`).
-10. Run migration-tool `migrate` for previously generated `migration_state.borsh`.
-11. Run migration-tool `migrate` for previously generated `migration_indexed.borsh`.
-12. Run migration-tool `migrate` with check correctness command for `migration_state.borsh`.
-13. Run migration-tool `migrate` with check correctness command for `migration_indexed.borsh`.
-14. Unpause Aurora contract and Bridge.
+10. Run migration-tool `combine-indexed-and-state-data` for indexed and state data (for ex: `migration_indexed.borsh` and `migration_state.borsh`).
+11. Run migration-tool `migrate` for previously generated `migration_full.borsh`.
+12. Unpause Aurora contract and Bridge.
 
 # How it works
 
