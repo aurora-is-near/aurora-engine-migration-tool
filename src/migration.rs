@@ -134,8 +134,9 @@ impl Migration {
 
             reproducible_data_for_accounts.push((accounts.clone(), accounts_count));
 
+            let migration_data: Vec<AccountId> = accounts.keys().cloned().collect();
             self.commit_migration(
-                accounts.try_to_vec().expect("Failed serialize"),
+                migration_data.try_to_vec().expect("Failed serialize"),
                 "Accounts",
                 accounts_count,
             )
