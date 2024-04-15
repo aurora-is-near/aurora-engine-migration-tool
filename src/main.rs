@@ -131,6 +131,20 @@ async fn main() -> anyhow::Result<()> {
                 .expect("Expected output file");
             Migration::prepare_indexed(input_data_file, output_file).await?;
         }
+        Some(("combine-indexed-and-state-data", cmd)) => {
+            let state_data_file = cmd.get_one::<PathBuf>("state").expect("Expected data file");
+            let indexed_data_file = cmd
+                .get_one::<PathBuf>("indexed")
+                .expect("Expected data file");
+            let output_file = cmd
+                .get_one::<PathBuf>("output")
+                .expect("Expected output file");
+            Migration::combine_indexed_and_state_data(
+                state_data_file,
+                indexed_data_file,
+                output_file,
+            )?;
+        }
         _ => (),
     }
 

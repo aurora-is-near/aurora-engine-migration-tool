@@ -25,12 +25,11 @@ pub struct BlockData {
 pub struct FungibleToken {
     pub total_eth_supply_on_near: NEP141Wei,
     pub total_eth_supply_on_aurora: NEP141Wei,
-    pub account_storage_usage: StorageUsage,
 }
 
 #[derive(Debug, Default, BorshSerialize, BorshDeserialize)]
 pub struct StateData {
-    pub contract_data: FungibleToken,
+    pub total_supply: NEP141Wei,
+    pub total_stuck_supply: NEP141Wei,
     pub accounts: HashMap<AccountId, NEP141Wei>,
-    pub proofs: Vec<String>,
 }

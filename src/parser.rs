@@ -10,16 +10,11 @@ use std::str::FromStr;
 enum KeyType {
     Accounts(Vec<u8>),
     Contract,
-    Proof(Vec<u8>),
     Unknown,
 }
 
 pub fn construct_contract_key(suffix: EthConnectorStorageId) -> Vec<u8> {
     bytes_to_key(KeyPrefix::EthConnector, &[u8::from(suffix)])
-}
-
-pub fn prefix_proof_key() -> Vec<u8> {
-    construct_contract_key(EthConnectorStorageId::UsedEvent)
 }
 
 pub fn prefix_account_key() -> Vec<u8> {
@@ -52,32 +47,28 @@ pub fn parse<P: AsRef<Path>>(json_file: P, output: Option<P>) -> anyhow::Result<
     println!("Data size: {:.3} Gb", data.len() as f64 / 1_000_000_000.);
     println!("Data values: {:#?}", json_data.result.values.len());
 
-    let mut proofs: Vec<String> = vec![];
     let mut accounts: HashMap<AccountId, NEP141Wei> = HashMap::new();
     let mut contract_data: FungibleToken = FungibleToken::default();
+    let mut total_stuck_supply = NEP141Wei::new(0);
 
     for result_value in &json_data.result.values {
         let key = base64::decode(&result_value.key)
             .map_err(|e| anyhow::anyhow!("Failed deserialize key, {e}"))?;
         // Get proofs
         match key_type(&key) {
-            KeyType::Proof(value) => {
-                let proof = String::from_utf8(value)
-                    .map_err(|e| anyhow::anyhow!("Failed parse proof, {e}"))?;
-                proofs.push(proof);
-            }
             KeyType::Accounts(value) => {
                 let account_str = std::str::from_utf8(&value)
                     .map_err(|e| anyhow::anyhow!("Failed parse account to str, {e}"))?;
-                let Ok(account) = AccountId::from_str(account_str) else {
-                    println!("\tNot fetched account: {account_str}");
-                    continue;
-                };
                 let account_balance = NEP141Wei::try_from_slice(
                     &base64::decode(&result_value.value)
                         .map_err(|e| anyhow::anyhow!("Failed get account balance, {e}"))?,
                 )
                 .map_err(|e| anyhow::anyhow!("Failed parse account balance, {e}"))?;
+                let Ok(account) = AccountId::from_str(account_str) else {
+                    total_stuck_supply = total_stuck_supply + account_balance;
+                    println!("\tNot fetched account: {account_str} with balance {account_balance}");
+                    continue;
+                };
                 accounts.insert(account, account_balance);
             }
             KeyType::Contract => {
@@ -89,14 +80,13 @@ pub fn parse<P: AsRef<Path>>(json_file: P, output: Option<P>) -> anyhow::Result<
             KeyType::Unknown => (), //anyhow::bail!("Unknown key type"),
         }
     }
-    println!("Proofs: {}", proofs.len());
     println!("Accounts: {}", accounts.len());
 
     // Store result data
     StateData {
-        contract_data,
+        total_supply: contract_data.total_eth_supply_on_near,
+        total_stuck_supply,
         accounts,
-        proofs,
     }
     .try_to_vec()
     .and_then(|data| std::fs::write(result_file_name, data))
@@ -104,11 +94,7 @@ pub fn parse<P: AsRef<Path>>(json_file: P, output: Option<P>) -> anyhow::Result<
 }
 
 fn key_type(key: &[u8]) -> KeyType {
-    if is_prefix_proof_key(key) {
-        let proof_prefix_len = prefix_proof_key().len();
-        let value = key[proof_prefix_len..].to_vec();
-        KeyType::Proof(value)
-    } else if is_account_prefix_key(key) {
+    if is_account_prefix_key(key) {
         let account_prefix_len = prefix_account_key().len();
         let value = key[account_prefix_len..].to_vec();
         KeyType::Accounts(value)
@@ -117,11 +103,6 @@ fn key_type(key: &[u8]) -> KeyType {
     } else {
         KeyType::Unknown
     }
-}
-
-fn is_prefix_proof_key(key: &[u8]) -> bool {
-    let proof_prefix = &prefix_proof_key();
-    key.len() > proof_prefix.len() && &key[..proof_prefix.len()] == proof_prefix
 }
 
 fn is_account_prefix_key(key: &[u8]) -> bool {
