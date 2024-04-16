@@ -1,6 +1,6 @@
 use crate::rpc::{BlockKind, Client, IndexedData};
 use near_primitives::types::BlockHeight;
-use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
+use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize, to_vec};
 use std::collections::HashSet;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -96,7 +96,7 @@ impl Indexer {
         data_file: P,
         current_block_height: BlockHeight,
     ) {
-        std::fs::write(data_file, data.try_to_vec().expect("Failed serialize"))
+        std::fs::write(data_file, to_vec(&data).expect("Failed serialize"))
             .expect("Failed save indexed data");
         println!(" [SAVE: {current_block_height:?}]");
     }
