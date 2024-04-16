@@ -466,12 +466,12 @@ impl Client {
             nonce: current_nonce + 1,
             receiver_id: contract.parse()?,
             block_hash: access_key_query_response.block_hash,
-            actions: vec![Action::FunctionCall(FunctionCallAction {
+            actions: vec![Action::FunctionCall(Box::new(FunctionCallAction {
                 method_name: method,
                 args,
                 gas: GAS_FOR_COMMIT_TX,
                 deposit: 0,
-            })],
+            }))],
         };
 
         let request = methods::broadcast_tx_commit::RpcBroadcastTxCommitRequest {

@@ -1,9 +1,9 @@
 use crate::rpc::{Client, REQUEST_TIMEOUT};
 use aurora_engine_migration_tool::StateData;
 use aurora_engine_types::types::NEP141Wei;
-use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
+use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize, to_vec};
 use near_sdk::json_types::U128;
-use near_sdk::{AccountId, Balance};
+use near_sdk::{AccountId};
 use serde_json::json;
 use std::collections::HashMap;
 use std::io::Write;
@@ -27,16 +27,16 @@ pub struct Migration {
 
 #[derive(Debug, BorshDeserialize, BorshSerialize)]
 pub struct MigrationInputData {
-    pub accounts: HashMap<AccountId, Balance>,
-    pub total_supply: Option<Balance>,
+    pub accounts: HashMap<AccountId, u128>,
+    pub total_supply: Option<u128>,
 }
 
 #[derive(Debug, BorshSerialize, BorshDeserialize, Eq, PartialEq)]
 pub enum MigrationCheckResult {
     Success,
     AccountNotExist(Vec<AccountId>),
-    AccountAmount(HashMap<AccountId, Balance>),
-    TotalSupply(Balance),
+    AccountAmount(HashMap<AccountId, u128>),
+    TotalSupply(u128),
 }
 
 impl Migration {
@@ -120,9 +120,9 @@ impl Migration {
         let limit = RECORDS_COUNT_PER_TX;
 
         // Accounts migration
-        let mut accounts: HashMap<AccountId, Balance> = HashMap::new();
+        let mut accounts: HashMap<AccountId, u128> = HashMap::new();
         let mut accounts_count = 0;
-        let mut reproducible_data_for_accounts: Vec<(HashMap<AccountId, Balance>, usize)> = vec![];
+        let mut reproducible_data_for_accounts: Vec<(HashMap<AccountId, u128>, usize)> = vec![];
 
         for (i, (account, amount)) in self.data.accounts.iter().enumerate() {
             accounts.insert(account.clone(), amount.as_u128());
@@ -136,7 +136,7 @@ impl Migration {
 
             let migration_data: Vec<AccountId> = accounts.keys().cloned().collect();
             self.commit_migration(
-                migration_data.try_to_vec().expect("Failed serialize"),
+                to_vec(&migration_data).expect("Failed serialize"),
                 "Accounts",
                 accounts_count,
             )
@@ -153,11 +153,10 @@ impl Migration {
 
         println!();
         for (accounts, counter) in reproducible_data_for_accounts {
-            let migration_data = MigrationInputData {
+            let migration_data = to_vec(&MigrationInputData {
                 accounts: accounts.clone(),
                 total_supply: None,
-            }
-            .try_to_vec()
+            })
             .expect("Failed serialize");
 
             self.check_migration("Accounts:", migration_data, counter)
@@ -165,13 +164,12 @@ impl Migration {
         }
 
         println!();
-        let contract_migration_data = MigrationInputData {
+        let contract_migration_data = to_vec(&MigrationInputData {
             accounts: HashMap::new(),
             total_supply: Some(
                 self.data.total_supply.as_u128() - self.data.total_stuck_supply.as_u128(),
             ),
-        }
-        .try_to_vec()
+        })
         .expect("Failed serialize");
         self.check_migration("Contract data:", contract_migration_data, 1)
             .await?;
@@ -224,8 +222,7 @@ impl Migration {
         println!("Accounts: {:?}", migration_data.accounts.len());
         println!("Total supply: {:?}", migration_data.total_supply.as_u128());
 
-        migration_data
-            .try_to_vec()
+        to_vec(&migration_data)
             .and_then(|data| std::fs::write(output, data))
             .map_err(|e| anyhow::anyhow!("Failed save migration data, {e}"))
     }
@@ -261,8 +258,7 @@ impl Migration {
             state_data.total_stuck_supply.as_u128()
         );
 
-        state_data
-            .try_to_vec()
+        to_vec(&state_data)
             .and_then(|data| std::fs::write(output, data))
             .map_err(|e| anyhow::anyhow!("Failed save migration data, {e}"))
     }
