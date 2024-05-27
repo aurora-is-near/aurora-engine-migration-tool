@@ -81,6 +81,23 @@ async fn main() -> anyhow::Result<()> {
                         .required(true),
                 )
         )
+        .subcommand(
+            Command::new("combine-indexed-and-state-data")
+                .about("Combine indexed and state data")
+                .arg(
+                    arg!(--state <FILE> "Path to the state data file in borsh format")
+                        .required(true)
+                        .value_parser(value_parser!(PathBuf)),
+                )
+                .arg(
+                    arg!(--indexed <FILE> "Path to the indexed data file in borsh format")
+                        .required(true),
+                )
+                .arg(
+                    arg!(--output <FILE> "Output file for combined state and indexed data in borsh format")
+                        .required(true),
+                )
+        )
         .get_matches();
 
     println!(
