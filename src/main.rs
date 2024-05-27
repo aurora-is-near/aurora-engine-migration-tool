@@ -68,7 +68,7 @@ async fn main() -> anyhow::Result<()> {
             Command::new("migrate")
                 .about("migrate Aurora contract NEP-141 state")
                 .arg(
-                    arg!(-f --file <FILE> "prepared state file for migration")
+                    arg!(-f --file <FILE> "Prepared state file for migration")
                         .required(true)
                         .value_parser(value_parser!(PathBuf)),
                 )
@@ -91,10 +91,29 @@ async fn main() -> anyhow::Result<()> {
                 )
                 .arg(
                     arg!(--indexed <FILE> "Path to the indexed data file in borsh format")
-                        .required(true),
+                        .required(true)
+                        .value_parser(value_parser!(PathBuf)),
                 )
                 .arg(
                     arg!(--output <FILE> "Output file for combined state and indexed data in borsh format")
+                        .required(true)
+                        .value_parser(value_parser!(PathBuf)),
+                )
+        )
+        .subcommand(
+            Command::new("check-migration")
+                .about("Check migration correctness")
+                .arg(
+                    arg!(-f --file <FILE> "Prepared state file for migration")
+                        .required(true)
+                        .value_parser(value_parser!(PathBuf)),
+                )
+                .arg(
+                arg!(-a --account <ACCOUNT_ID> "Account ID of aurora-eth-connector")
+                    .required(true),
+                )
+                .arg(
+                    arg!(-k --key <ACCOUNT_KEY> "Account private key for sign transactions")
                         .required(true),
                 )
         )
@@ -161,6 +180,18 @@ async fn main() -> anyhow::Result<()> {
                 indexed_data_file,
                 output_file,
             )?;
+        }
+        Some(("check-migration", cmd)) => {
+            let data_file = cmd.get_one::<PathBuf>("file").expect("Expected data file");
+
+            let account_id = cmd
+                .get_one::<String>("account")
+                .expect("Expected account-id");
+            let account_key = cmd.get_one::<String>("key").expect("Expected account-key");
+
+            Migration::new(data_file, account_id.clone(), account_key.clone())?
+                .validate_migration()
+                .await?;
         }
         _ => (),
     }

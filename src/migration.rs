@@ -114,8 +114,39 @@ impl Migration {
         Ok(())
     }
 
-    /// Run migration process
-    pub async fn run(&self) -> anyhow::Result<()> {
+    // Checking the correctness and integrity of data, regardless of
+    // the migration process
+    async fn check_migration_full(&self, reproducible_data_for_accounts:  Vec<(HashMap<AccountId, Balance>, usize)>) -> anyhow::Result<()> {
+        println!();
+        for (accounts, counter) in reproducible_data_for_accounts {
+            let migration_data = MigrationInputData {
+                accounts: accounts.clone(),
+                total_supply: None,
+            }
+                .try_to_vec()
+                .expect("Failed serialize");
+
+            self.check_migration("Accounts:", migration_data, counter)
+                .await?;
+        }
+
+        println!();
+        let contract_migration_data = MigrationInputData {
+            accounts: HashMap::new(),
+            total_supply: Some(
+                self.data.total_supply.as_u128() - self.data.total_stuck_supply.as_u128(),
+            ),
+        }
+            .try_to_vec()
+            .expect("Failed serialize");
+        self.check_migration("Contract data:", contract_migration_data, 1)
+            .await?;
+
+        println!();
+        Ok(())
+    }
+
+    fn get_reproducible_data_for_accounts(&self) -> Vec<(HashMap<AccountId, Balance>, usize)> {
         // Data limit per transaction
         let limit = RECORDS_COUNT_PER_TX;
 
@@ -134,50 +165,35 @@ impl Migration {
 
             reproducible_data_for_accounts.push((accounts.clone(), accounts_count));
 
+            // Clear
+            accounts.clear();
+        }
+
+        assert_eq!(self.data.accounts.len(), accounts_count);
+
+        reproducible_data_for_accounts
+    }
+
+    /// Check migration
+    pub async fn validate_migration(&self) -> anyhow::Result<()> {
+        let reproducible_data_for_accounts = self.get_reproducible_data_for_accounts();
+        self.check_migration_full(reproducible_data_for_accounts).await
+    }
+
+    /// Run migration process
+    pub async fn run(&self) -> anyhow::Result<()> {
+        let reproducible_data_for_accounts = self.get_reproducible_data_for_accounts();
+        for (accounts, accounts_count) in &reproducible_data_for_accounts {
             let migration_data: Vec<AccountId> = accounts.keys().cloned().collect();
             self.commit_migration(
                 migration_data.try_to_vec().expect("Failed serialize"),
                 "Accounts",
-                accounts_count,
+                accounts_count.clone(),
             )
             .await?;
-
-            // Clear
-            accounts.clear();
-        }
-        assert_eq!(self.data.accounts.len(), accounts_count);
-
-        //=====================================
-        // Checking the correctness and integrity of data, regardless of
-        // the migration process
-
-        println!();
-        for (accounts, counter) in reproducible_data_for_accounts {
-            let migration_data = MigrationInputData {
-                accounts: accounts.clone(),
-                total_supply: None,
-            }
-            .try_to_vec()
-            .expect("Failed serialize");
-
-            self.check_migration("Accounts:", migration_data, counter)
-                .await?;
         }
 
-        println!();
-        let contract_migration_data = MigrationInputData {
-            accounts: HashMap::new(),
-            total_supply: Some(
-                self.data.total_supply.as_u128() - self.data.total_stuck_supply.as_u128(),
-            ),
-        }
-        .try_to_vec()
-        .expect("Failed serialize");
-        self.check_migration("Contract data:", contract_migration_data, 1)
-            .await?;
-
-        println!();
-        Ok(())
+        self.check_migration_full(reproducible_data_for_accounts).await
     }
 
     /// Prepare indexed data for migration from Indexer data
