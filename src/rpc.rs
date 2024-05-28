@@ -487,6 +487,7 @@ impl Client {
                 .call(&request)
                 .await
                 .map_err(|err| CommitTx::Commit(format!("{err:?}")));
+
             // Check response and set errors if it needs
             if let Ok(tx_res) = res {
                 // If success - check response status

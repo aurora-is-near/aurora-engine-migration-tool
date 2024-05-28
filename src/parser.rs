@@ -74,6 +74,7 @@ pub fn parse<P: AsRef<Path>>(json_file: P, output: Option<P>) -> anyhow::Result<
             KeyType::Contract => {
                 let val = base64::decode(&result_value.value)
                     .map_err(|e| anyhow::anyhow!("Failed get contract data, {e}"))?;
+
                 contract_data = FungibleToken::try_from_slice(&val)
                     .map_err(|e| anyhow::anyhow!("Failed parse contract data, {e}"))?;
             }

@@ -114,43 +114,12 @@ impl Migration {
         Ok(())
     }
 
-    /// Run migration process
-    pub async fn run(&self) -> anyhow::Result<()> {
-        // Data limit per transaction
-        let limit = RECORDS_COUNT_PER_TX;
-
-        // Accounts migration
-        let mut accounts: HashMap<AccountId, Balance> = HashMap::new();
-        let mut accounts_count = 0;
-        let mut reproducible_data_for_accounts: Vec<(HashMap<AccountId, Balance>, usize)> = vec![];
-
-        for (i, (account, amount)) in self.data.accounts.iter().enumerate() {
-            accounts.insert(account.clone(), amount.as_u128());
-
-            if accounts.len() < limit && i < self.data.accounts.len() - 1 {
-                continue;
-            }
-            accounts_count += &accounts.len();
-
-            reproducible_data_for_accounts.push((accounts.clone(), accounts_count));
-
-            let migration_data: Vec<AccountId> = accounts.keys().cloned().collect();
-            self.commit_migration(
-                migration_data.try_to_vec().expect("Failed serialize"),
-                "Accounts",
-                accounts_count,
-            )
-            .await?;
-
-            // Clear
-            accounts.clear();
-        }
-        assert_eq!(self.data.accounts.len(), accounts_count);
-
-        //=====================================
-        // Checking the correctness and integrity of data, regardless of
-        // the migration process
-
+    // Checking the correctness and integrity of data, regardless of
+    // the migration process
+    async fn check_migration_full(
+        &self,
+        reproducible_data_for_accounts: Vec<(HashMap<AccountId, Balance>, usize)>,
+    ) -> anyhow::Result<()> {
         println!();
         for (accounts, counter) in reproducible_data_for_accounts {
             let migration_data = MigrationInputData {
@@ -173,11 +142,68 @@ impl Migration {
         }
         .try_to_vec()
         .expect("Failed serialize");
+
+        println!(
+            "Expected total supply: {:?}",
+            self.data.total_supply.as_u128() - self.data.total_stuck_supply.as_u128()
+        );
         self.check_migration("Contract data:", contract_migration_data, 1)
             .await?;
 
         println!();
         Ok(())
+    }
+
+    fn get_reproducible_data_for_accounts(&self) -> Vec<(HashMap<AccountId, Balance>, usize)> {
+        // Data limit per transaction
+        let limit = RECORDS_COUNT_PER_TX;
+
+        // Accounts migration
+        let mut accounts: HashMap<AccountId, Balance> = HashMap::new();
+        let mut accounts_count = 0;
+        let mut reproducible_data_for_accounts: Vec<(HashMap<AccountId, Balance>, usize)> = vec![];
+
+        for (i, (account, amount)) in self.data.accounts.iter().enumerate() {
+            accounts.insert(account.clone(), amount.as_u128());
+
+            if accounts.len() < limit && i < self.data.accounts.len() - 1 {
+                continue;
+            }
+            accounts_count += &accounts.len();
+
+            reproducible_data_for_accounts.push((accounts.clone(), accounts_count));
+
+            // Clear
+            accounts.clear();
+        }
+
+        assert_eq!(self.data.accounts.len(), accounts_count);
+
+        reproducible_data_for_accounts
+    }
+
+    /// Check migration
+    pub async fn validate_migration(&self) -> anyhow::Result<()> {
+        let reproducible_data_for_accounts = self.get_reproducible_data_for_accounts();
+        self.check_migration_full(reproducible_data_for_accounts)
+            .await
+    }
+
+    /// Run migration process
+    pub async fn run(&self) -> anyhow::Result<()> {
+        let reproducible_data_for_accounts = self.get_reproducible_data_for_accounts();
+        for (accounts, accounts_count) in &reproducible_data_for_accounts {
+            let migration_data: Vec<AccountId> = accounts.keys().cloned().collect();
+            self.commit_migration(
+                migration_data.try_to_vec().expect("Failed serialize"),
+                "Accounts",
+                *accounts_count,
+            )
+            .await?;
+        }
+
+        self.check_migration_full(reproducible_data_for_accounts)
+            .await
     }
 
     /// Prepare indexed data for migration from Indexer data

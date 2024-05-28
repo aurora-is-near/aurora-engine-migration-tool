@@ -25,6 +25,7 @@ pub struct BlockData {
 pub struct FungibleToken {
     pub total_eth_supply_on_near: NEP141Wei,
     pub total_eth_supply_on_aurora: NEP141Wei,
+    pub account_storage_usage: StorageUsage,
 }
 
 #[derive(Debug, Default, BorshSerialize, BorshDeserialize)]
