@@ -139,6 +139,8 @@ impl Migration {
         }
             .try_to_vec()
             .expect("Failed serialize");
+
+        println!("Expected total supply: {:?}",  self.data.total_supply.as_u128() - self.data.total_stuck_supply.as_u128());
         self.check_migration("Contract data:", contract_migration_data, 1)
             .await?;
 

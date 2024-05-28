@@ -208,6 +208,7 @@ privkey=$(cat $ETH_CONNECTOR_KEY_PATH | jq '.private_key' | tr -d '"')
 echo "$privkey"
 $MIGRATION_TOOL migrate --file res_state.borsh --account "$ETH_CONNECTOR_ACCOUNT" --key "$privkey"
 
+sleep 10
 echo "Check migration"
 $MIGRATION_TOOL check-migration --file res_state.borsh --account "$ETH_CONNECTOR_ACCOUNT" --key "$privkey"
 
