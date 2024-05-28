@@ -116,15 +116,18 @@ impl Migration {
 
     // Checking the correctness and integrity of data, regardless of
     // the migration process
-    async fn check_migration_full(&self, reproducible_data_for_accounts:  Vec<(HashMap<AccountId, Balance>, usize)>) -> anyhow::Result<()> {
+    async fn check_migration_full(
+        &self,
+        reproducible_data_for_accounts: Vec<(HashMap<AccountId, Balance>, usize)>,
+    ) -> anyhow::Result<()> {
         println!();
         for (accounts, counter) in reproducible_data_for_accounts {
             let migration_data = MigrationInputData {
                 accounts: accounts.clone(),
                 total_supply: None,
             }
-                .try_to_vec()
-                .expect("Failed serialize");
+            .try_to_vec()
+            .expect("Failed serialize");
 
             self.check_migration("Accounts:", migration_data, counter)
                 .await?;
@@ -137,10 +140,13 @@ impl Migration {
                 self.data.total_supply.as_u128() - self.data.total_stuck_supply.as_u128(),
             ),
         }
-            .try_to_vec()
-            .expect("Failed serialize");
+        .try_to_vec()
+        .expect("Failed serialize");
 
-        println!("Expected total supply: {:?}",  self.data.total_supply.as_u128() - self.data.total_stuck_supply.as_u128());
+        println!(
+            "Expected total supply: {:?}",
+            self.data.total_supply.as_u128() - self.data.total_stuck_supply.as_u128()
+        );
         self.check_migration("Contract data:", contract_migration_data, 1)
             .await?;
 
@@ -179,7 +185,8 @@ impl Migration {
     /// Check migration
     pub async fn validate_migration(&self) -> anyhow::Result<()> {
         let reproducible_data_for_accounts = self.get_reproducible_data_for_accounts();
-        self.check_migration_full(reproducible_data_for_accounts).await
+        self.check_migration_full(reproducible_data_for_accounts)
+            .await
     }
 
     /// Run migration process
@@ -190,12 +197,13 @@ impl Migration {
             self.commit_migration(
                 migration_data.try_to_vec().expect("Failed serialize"),
                 "Accounts",
-                accounts_count.clone(),
+                *accounts_count,
             )
             .await?;
         }
 
-        self.check_migration_full(reproducible_data_for_accounts).await
+        self.check_migration_full(reproducible_data_for_accounts)
+            .await
     }
 
     /// Prepare indexed data for migration from Indexer data
