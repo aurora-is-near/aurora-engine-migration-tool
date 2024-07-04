@@ -42,6 +42,7 @@ pub enum MigrationCheckResult {
 impl Migration {
     pub fn new<P: AsRef<Path>>(
         data_file: P,
+        contract_account_id: String,
         signer_account_id: String,
         signer_secret_key: String,
     ) -> anyhow::Result<Self> {
@@ -54,7 +55,7 @@ impl Migration {
             config: MigrationConfig {
                 signer_account_id: signer_account_id.clone(),
                 signer_secret_key,
-                contract: signer_account_id,
+                contract: contract_account_id,
             },
         })
     }

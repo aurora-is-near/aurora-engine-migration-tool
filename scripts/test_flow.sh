@@ -206,11 +206,11 @@ $MIGRATION_TOOL parse -f res_state.json -o res_state.borsh
 echo "Migrate data to Eth-Connector"
 privkey=$(cat $ETH_CONNECTOR_KEY_PATH | jq '.private_key' | tr -d '"')
 echo "$privkey"
-$MIGRATION_TOOL migrate --file res_state.borsh --account "$ETH_CONNECTOR_ACCOUNT" --key "$privkey"
+$MIGRATION_TOOL migrate --file res_state.borsh --signer "$ETH_CONNECTOR_ACCOUNT" --contract "$ETH_CONNECTOR_ACCOUNT"  --key "$privkey"
 
 sleep 10
 echo "Check migration"
-$MIGRATION_TOOL check-migration --file res_state.borsh --account "$ETH_CONNECTOR_ACCOUNT" --key "$privkey"
+$MIGRATION_TOOL check-migration --file res_state.borsh --signer "$ETH_CONNECTOR_ACCOUNT" --contract "$ETH_CONNECTOR_ACCOUNT" --key "$privkey"
 
 echo "Get migrated balance"
 near view $ETH_CONNECTOR_ACCOUNT ft_balance_of  '{"account_id": "test_account.near"}' --keyPath $ETH_CONNECTOR_KEY_PATH --network_id localnet --nodeUrl  http://127.0.0.1:3030 || error_exit
