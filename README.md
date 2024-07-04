@@ -166,14 +166,15 @@ but we still need to know it, because we can store just zero balance.
 has same sense.
 
 Parameters:
-- `--account` - contract name for migration. Ex: `some-acc.testnet`.
+- `--contract` - contract name for migration. Ex: `some-acc.testnet`.
+- `--signer` - signer account id for migration. Ex: `some-acc.testnet`.
 - `--key` - Account private key for sign migration transactions.
 - `--file` - input file that contain borsh serialized data for the migration.
 
 Example:
 
 ```
-$ aurora-engine-migration-tool migrate --account ${ACCOUNT_ID} --key ${ACCOUNT_KEY} --file contract_state.borsh
+$ aurora-engine-migration-tool migrate --contract ${ACCOUNT_ID} --signer ${ACCOUNT_ID} --key ${ACCOUNT_KEY} --file contract_state.borsh
 ```
 
 # Features flags
@@ -197,7 +198,8 @@ Available options:
 - `make build-mainnet-release` - build release version of application for NEAR mainnet. 
 - `make build-testnet-release` - build release version of application for NEAR testnet.
 - `migrate-testnet` - build testnet release and run migration with parameters from environment:
-    - `--account ${ACCOUNT_ID}` - contract name for migration. Ex: `some-acc.testnet`.
+    - `--contract ${ACCOUNT_ID}` - contract name for migration. Ex: `some-acc.testnet`.
+    - `--signer ${ACCOUNT_ID}` - signer account id for migration. Ex: `some-acc.testnet`.
     - `--key ${ACCOUNT_KEY}` - Account private key for sign migration transactions. 
     - `--file contract_state.borsh` - input data for migration.
 - `make index-fullstat` - build indexer and run full-stat command for indexer.
