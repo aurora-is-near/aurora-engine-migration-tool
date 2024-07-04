@@ -15,7 +15,7 @@
 # Init variables
 export NEARCORE_HOME="/tmp/localnet"
 
-AURORA_LAST_VERSION="3.3.1"
+AURORA_LAST_VERSION="3.6.3"
 USER_BASE_BIN=$(python3 -m site --user-base)/bin
 ENGINE_LAST_WASM_URL="https://github.com/aurora-is-near/aurora-engine/releases/download/$AURORA_LAST_VERSION/aurora-mainnet.wasm"
 ENGINE_WASM="/tmp/aurora-contract/target/wasm32-unknown-unknown/release/aurora_engine.wasm"
@@ -207,6 +207,10 @@ echo "Migrate data to Eth-Connector"
 privkey=$(cat $ETH_CONNECTOR_KEY_PATH | jq '.private_key' | tr -d '"')
 echo "$privkey"
 $MIGRATION_TOOL migrate --file res_state.borsh --account "$ETH_CONNECTOR_ACCOUNT" --key "$privkey"
+
+sleep 10
+echo "Check migration"
+$MIGRATION_TOOL check-migration --file res_state.borsh --account "$ETH_CONNECTOR_ACCOUNT" --key "$privkey"
 
 echo "Get migrated balance"
 near view $ETH_CONNECTOR_ACCOUNT ft_balance_of  '{"account_id": "test_account.near"}' --keyPath $ETH_CONNECTOR_KEY_PATH --network_id localnet --nodeUrl  http://127.0.0.1:3030 || error_exit
