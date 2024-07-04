@@ -73,7 +73,11 @@ async fn main() -> anyhow::Result<()> {
                         .value_parser(value_parser!(PathBuf)),
                 )
                 .arg(
-                    arg!(-a --account <ACCOUNT_ID> "Account ID to run migration")
+                    arg!(-c --contract <ACCOUNT_ID> "Account ID of aurora-eth-connector")
+                        .required(true),
+                )
+                .arg(
+                    arg!(-s --signer <ACCOUNT_ID> "Signer Account ID")
                         .required(true),
                 )
                 .arg(
@@ -163,9 +167,14 @@ async fn main() -> anyhow::Result<()> {
                 .expect("Expected account-id");
             let signer_account_key = cmd.get_one::<String>("key").expect("Expected account-key");
 
-            Migration::new(data_file, contract_account_id.clone(), signer_account_id.clone(), signer_account_key.clone())?
-                .run()
-                .await?;
+            Migration::new(
+                data_file,
+                contract_account_id.clone(),
+                signer_account_id.clone(),
+                signer_account_key.clone(),
+            )?
+            .run()
+            .await?;
         }
         Some(("prepare-migrate-indexed", cmd)) => {
             let input_data_file = cmd.get_one::<PathBuf>("file").expect("Expected data file");
@@ -191,14 +200,22 @@ async fn main() -> anyhow::Result<()> {
         Some(("check-migration", cmd)) => {
             let data_file = cmd.get_one::<PathBuf>("file").expect("Expected data file");
 
-            let account_id = cmd
-                .get_one::<String>("account")
+            let contract_account_id = cmd
+                .get_one::<String>("contract")
                 .expect("Expected account-id");
-            let account_key = cmd.get_one::<String>("key").expect("Expected account-key");
+            let signer_account_id = cmd
+                .get_one::<String>("signer")
+                .expect("Expected account-id");
+            let signer_account_key = cmd.get_one::<String>("key").expect("Expected account-key");
 
-            Migration::new(data_file, account_id.clone(), account_key.clone())?
-                .validate_migration()
-                .await?;
+            Migration::new(
+                data_file,
+                contract_account_id.clone(),
+                signer_account_id.clone(),
+                signer_account_key.clone(),
+            )?
+            .validate_migration()
+            .await?;
         }
         _ => (),
     }
