@@ -121,7 +121,7 @@ impl Migration {
         &self,
         reproducible_data_for_accounts: Vec<(HashMap<AccountId, Balance>, usize)>,
     ) -> anyhow::Result<()> {
-        println!();
+        println!("Num of batches: {}", reproducible_data_for_accounts.len());
         for (accounts, counter) in reproducible_data_for_accounts {
             let migration_data = MigrationInputData {
                 accounts: accounts.clone(),
@@ -172,6 +172,7 @@ impl Migration {
             }
             accounts_count += &accounts.len();
 
+            println!("Create of batch with len {}", accounts.len());
             reproducible_data_for_accounts.push((accounts.clone(), accounts_count));
 
             // Clear
@@ -193,8 +194,13 @@ impl Migration {
     /// Run migration process
     pub async fn run(&self) -> anyhow::Result<()> {
         let reproducible_data_for_accounts = self.get_reproducible_data_for_accounts();
+        println!("Num of batches: {}", reproducible_data_for_accounts.len());
         for (accounts, accounts_count) in &reproducible_data_for_accounts {
             let migration_data: Vec<AccountId> = accounts.keys().cloned().collect();
+            println!(
+                "commit_migration. num of accounts: {}",
+                migration_data.len()
+            );
             self.commit_migration(
                 migration_data.try_to_vec().expect("Failed serialize"),
                 "Accounts",
