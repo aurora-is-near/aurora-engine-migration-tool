@@ -1,7 +1,7 @@
 use aurora_engine_migration_tool::{BlockData, FungibleToken, StateData};
 use aurora_engine_types::storage::{bytes_to_key, EthConnectorStorageId, KeyPrefix};
 use aurora_engine_types::types::NEP141Wei;
-use near_sdk::borsh::{BorshDeserialize, to_vec};
+use near_sdk::borsh::{to_vec, BorshDeserialize};
 use near_sdk::AccountId;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};

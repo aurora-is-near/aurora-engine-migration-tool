@@ -1,9 +1,9 @@
 use crate::rpc::{Client, REQUEST_TIMEOUT};
 use aurora_engine_migration_tool::StateData;
 use aurora_engine_types::types::NEP141Wei;
-use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize, to_vec};
+use near_sdk::borsh::{self, to_vec, BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::U128;
-use near_sdk::{AccountId};
+use near_sdk::AccountId;
 use serde_json::json;
 use std::collections::HashMap;
 use std::io::Write;
