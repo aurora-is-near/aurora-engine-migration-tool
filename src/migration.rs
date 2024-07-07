@@ -164,7 +164,9 @@ impl Migration {
         let mut accounts_count = 0;
         let mut reproducible_data_for_accounts: Vec<(HashMap<AccountId, Balance>, usize)> = vec![];
 
+        let mut real_total_supply = NEP141Wei::new(0);
         for (i, (account, amount)) in self.data.accounts.iter().enumerate() {
+            real_total_supply = real_total_supply + *amount;
             accounts.insert(account.clone(), amount.as_u128());
 
             if accounts.len() < limit && i < self.data.accounts.len() - 1 {
@@ -178,7 +180,19 @@ impl Migration {
             accounts.clear();
         }
 
+        let diff_total_supply = self
+            .data
+            .total_supply
+            .checked_sub(real_total_supply)
+            .expect("Real total supply cannot be higher than the total supply");
+
+        println!("num_of_accounts: {}", self.data.accounts.len());
+        println!("total_supply: {}", self.data.total_supply);
+        println!("real_total_supply: {}", real_total_supply);
+        println!("total_stuck_supply: {}", self.data.total_stuck_supply);
+        println!("total_supply - real_total_supply: {}", diff_total_supply);
         assert_eq!(self.data.accounts.len(), accounts_count);
+        assert_eq!(diff_total_supply, self.data.total_stuck_supply);
 
         reproducible_data_for_accounts
     }
@@ -194,10 +208,11 @@ impl Migration {
     pub async fn run(&self) -> anyhow::Result<()> {
         let reproducible_data_for_accounts = self.get_reproducible_data_for_accounts();
         println!("Num of batches: {}", reproducible_data_for_accounts.len());
-        for (accounts, accounts_count) in &reproducible_data_for_accounts {
+        for (index, (accounts, accounts_count)) in reproducible_data_for_accounts.iter().enumerate()
+        {
             let migration_data: Vec<AccountId> = accounts.keys().cloned().collect();
             println!(
-                "commit_migration. num of accounts: {}",
+                "commit_migration_batch: {index}, num_of_accounts: {}",
                 migration_data.len()
             );
             self.commit_migration(
