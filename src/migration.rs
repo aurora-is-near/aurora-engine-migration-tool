@@ -166,7 +166,6 @@ impl Migration {
 
         for (i, (account, amount)) in self.data.accounts.iter().enumerate() {
             accounts.insert(account.clone(), amount.as_u128());
-            println!("account: {}, balance: {}", account, amount.as_u128());
 
             if accounts.len() < limit && i < self.data.accounts.len() - 1 {
                 continue;
