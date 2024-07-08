@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::signal::unix::SignalKind;
-use tokio::time::Instant;
+use tokio::time::{Instant, sleep};
 
 const SAVE_FILE_TIMEOUT: Duration = Duration::from_secs(60);
 const FORWARD_BLOCK_TIMEOUT: Duration = Duration::from_secs(120);
@@ -95,10 +95,14 @@ impl Indexer {
         data: &IndexerData,
         data_file: P,
         current_block_height: BlockHeight,
+        first_handled_block_height: BlockHeight,
+        last_handled_block_height: BlockHeight,
     ) {
         std::fs::write(data_file, data.try_to_vec().expect("Failed serialize"))
             .expect("Failed save indexed data");
-        println!(" [SAVE: {current_block_height:?}]");
+        println!(" [SAVE: current block: {current_block_height:?}, \
+                          first handled block: {first_handled_block_height:?}, \
+                          last handled block: {last_handled_block_height:?}]");
     }
 
     /// Set current index data
@@ -186,11 +190,15 @@ impl Indexer {
         let first_block = self.data.lock().unwrap().first_block;
         let (current_block, current_height) = if self.force_blocks {
             (None, 0)
-        } else if self.last_forward_time.elapsed() > FORWARD_BLOCK_TIMEOUT {
+        } else if self.forward_block == None ||
+                  self.last_forward_time.elapsed() > FORWARD_BLOCK_TIMEOUT {
             self.last_forward_time = Instant::now();
             if let Ok(block) = client.get_block(BlockKind::Latest).await {
                 // Skip, if block already exists
-                if last_block >= block.0 {
+                if last_block > block.0 {
+                    println!("ERROR: last handled block cannot be bigger latest block. \
+                              Sleep: {FORWARD_BLOCK_TIMEOUT:?}");
+                    sleep(FORWARD_BLOCK_TIMEOUT).await;
                     return None;
                 }
                 self.forward_block = Some(block.0);
@@ -221,9 +229,25 @@ impl Indexer {
             (first_block - 1, last_block, first_block - 1)
         };
 
+        // Get `current_height`
+        let current_height = if current_height == 0 {
+            if let Some(height) = self.forward_block {
+                height
+            } else {
+                0
+            }
+        } else {
+            current_height
+        };
+
         // Check, do we need fetch history data or force check from some block height
         let block = if self.force_index_from_block.is_some() || self.fetch_history {
-            if let Ok(block) = client.get_block(BlockKind::Height(num_height)).await {
+            if num_height > current_height {
+                println!("Try to fetch block with height bigger than latest block. \
+                          Sleep: {FORWARD_BLOCK_TIMEOUT:?}");
+                sleep(FORWARD_BLOCK_TIMEOUT).await;
+                None
+            } else if let Ok(block) = client.get_block(BlockKind::Height(num_height)).await {
                 Some(block)
             } else {
                 // If block not found do not fail, just increment height
@@ -238,17 +262,6 @@ impl Indexer {
 
         print!("\rHeight: {height:?}");
         std::io::stdout().flush().expect("Flush failed");
-
-        // Get `current_height`
-        let current_height = if current_height == 0 {
-            if let Some(height) = self.forward_block {
-                height
-            } else {
-                0
-            }
-        } else {
-            current_height
-        };
 
         let indexed_data = client.get_chunk_indexed_data(chunks, height).await;
         self.set_indexed_data(
@@ -268,7 +281,7 @@ impl Indexer {
             let data = self.data.lock().unwrap().clone();
 
             Some(tokio::spawn(async move {
-                Self::save_data(&data, &data_file, current_block_height);
+                Self::save_data(&data, &data_file, current_block_height, first_block, height);
             }))
         } else {
             None
