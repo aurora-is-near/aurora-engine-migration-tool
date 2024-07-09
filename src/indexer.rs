@@ -205,6 +205,7 @@ impl Indexer {
             sleep(FORWARD_BLOCK_TIMEOUT).await;
             None
         } else if let Ok(block) = client.get_block(BlockKind::Height(last_block)).await {
+            client.unresolved_blocks.remove(&last_block);
             Some(block)
         } else {
             // If block not found do not fail, just increment height
