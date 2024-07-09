@@ -136,7 +136,10 @@ async fn main() -> anyhow::Result<()> {
         Some(("indexer", cmd)) => {
             let stat = cmd.get_flag("stat");
             let fullstat = cmd.get_flag("fullstat");
-            let block = cmd.get_one::<u64>("block").copied().expect("Expected start block height");
+            let block = cmd
+                .get_one::<u64>("block")
+                .copied()
+                .expect("Expected start block height");
             let mut indexer = Indexer::new("data.borsh", block)?;
 
             if stat {

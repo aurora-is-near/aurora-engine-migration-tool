@@ -34,17 +34,14 @@ pub struct Indexer {
 
 impl Indexer {
     /// Init new indexer
-    pub fn new<P: AsRef<Path>>(
-        data_file: P,
-        block_height: BlockHeight,
-    ) -> anyhow::Result<Self> {
+    pub fn new<P: AsRef<Path>>(data_file: P, block_height: BlockHeight) -> anyhow::Result<Self> {
         // If file doesn't exist just return default data
         let data = std::fs::read(&data_file).unwrap_or_default();
         let mut data = IndexerData::try_from_slice(&data).unwrap_or_default();
 
-        data.last_block = block_height.clone() - 1;
+        data.last_block = block_height - 1;
         if data.first_block > block_height {
-            data.first_block = block_height.clone();
+            data.first_block = block_height;
         }
 
         Ok(Self {
@@ -185,15 +182,14 @@ impl Indexer {
     async fn handle_block(&mut self, client: &mut Client) -> Option<tokio::task::JoinHandle<()>> {
         let last_block = self.data.lock().unwrap().last_block + 1;
         let first_block = self.data.lock().unwrap().first_block;
-        let mut current_height =
-            if let Some(height) = self.forward_block {
-                height
-            } else {
-                0
-            };
+        let mut current_height = if let Some(height) = self.forward_block {
+            height
+        } else {
+            0
+        };
 
-        if self.forward_block.is_none()
-            || self.last_forward_time.elapsed() > FORWARD_BLOCK_TIMEOUT {
+        if self.forward_block.is_none() || self.last_forward_time.elapsed() > FORWARD_BLOCK_TIMEOUT
+        {
             self.last_forward_time = Instant::now();
             if let Ok(block) = client.get_block(BlockKind::Latest).await {
                 self.forward_block = Some(block.0);
@@ -202,20 +198,20 @@ impl Indexer {
         }
 
         let block = if last_block > current_height {
-                println!(
-                    "Try to fetch block with height bigger than latest block. \
+            println!(
+                "Try to fetch block with height bigger than latest block. \
                           Sleep: {FORWARD_BLOCK_TIMEOUT:?}"
-                );
-                sleep(FORWARD_BLOCK_TIMEOUT).await;
-                None
-            } else if let Ok(block) = client.get_block(BlockKind::Height(last_block)).await {
-                Some(block)
-            } else {
-                // If block not found do not fail, just increment height
-                let mut data = self.data.lock().unwrap();
-                data.last_block = last_block;
-                None
-            };
+            );
+            sleep(FORWARD_BLOCK_TIMEOUT).await;
+            None
+        } else if let Ok(block) = client.get_block(BlockKind::Height(last_block)).await {
+            Some(block)
+        } else {
+            // If block not found do not fail, just increment height
+            let mut data = self.data.lock().unwrap();
+            data.last_block = last_block;
+            None
+        };
 
         let (_, chunks, block_hash, prev_block_hash) = block?;
 
@@ -249,7 +245,13 @@ impl Indexer {
             let data = self.data.lock().unwrap().clone();
 
             Some(tokio::spawn(async move {
-                Self::save_data(&data, &data_file, current_block_height, first_block, last_block);
+                Self::save_data(
+                    &data,
+                    &data_file,
+                    current_block_height,
+                    first_block,
+                    last_block,
+                );
             }))
         } else {
             None
