@@ -1,4 +1,5 @@
 use crate::rpc::{BlockKind, Client, IndexedData};
+use near_primitives::hash::CryptoHash;
 use near_primitives::types::BlockHeight;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use std::collections::HashSet;
@@ -16,7 +17,9 @@ const FORWARD_BLOCK_TIMEOUT: Duration = Duration::from_secs(120);
 pub struct IndexerData {
     pub first_block: BlockHeight,
     pub last_block: BlockHeight,
+    pub last_handled_block: BlockHeight,
     pub current_block: BlockHeight,
+    pub last_block_hash: Option<CryptoHash>,
     pub missed_blocks: HashSet<BlockHeight>,
     pub data: IndexedData,
 }
@@ -114,6 +117,7 @@ impl Indexer {
         current_block: BlockHeight,
         last_block: BlockHeight,
         first_block: BlockHeight,
+        block_hash: CryptoHash,
     ) {
         let mut data = self.data.lock().unwrap();
         data.first_block = first_block;
@@ -121,6 +125,7 @@ impl Indexer {
             data.first_block = height;
         }
         data.last_block = last_block;
+        data.last_handled_block = last_block;
         data.current_block = current_block;
         for account in indexed_data.accounts {
             data.data.accounts.insert(account);
@@ -131,6 +136,7 @@ impl Indexer {
         let mut logs = indexed_data.logs;
         data.data.logs.append(&mut logs);
         data.missed_blocks = missed_blocks;
+        data.last_block_hash = Some(block_hash);
     }
 
     fn shutdown_listener() -> tokio::sync::mpsc::Receiver<()> {
@@ -252,13 +258,22 @@ impl Indexer {
             } else {
                 // If block not found do not fail, just increment height
                 let mut data = self.data.lock().unwrap();
-                data.last_block = last_block + 1;
+                data.last_block = last_block;
                 None
             }
         } else {
             current_block
         };
-        let (height, chunks) = block?;
+        let (height, chunks, block_hash, prev_block_hash) = block?;
+
+        let last_block_hash = self.data.lock().unwrap().last_block_hash;
+        if let Some(block_hash) = last_block_hash {
+            if block_hash != prev_block_hash {
+                let mut data = self.data.lock().unwrap();
+                data.last_block = data.last_handled_block;
+                return None;
+            }
+        }
 
         print!("\rHeight: {height:?}");
         std::io::stdout().flush().expect("Flush failed");
@@ -271,6 +286,7 @@ impl Indexer {
             current_height,
             last_block,
             first_block,
+            block_hash
         );
 
         // Save data

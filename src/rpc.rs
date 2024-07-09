@@ -3,6 +3,7 @@
 //!
 use near_jsonrpc_client::{methods, JsonRpcClient, MethodCallResult};
 use near_jsonrpc_primitives::types::query::QueryResponseKind;
+use near_primitives::hash::CryptoHash;
 use near_primitives::transaction::{Action, FunctionCallAction, Transaction};
 use near_primitives::types::{BlockHeight, BlockReference};
 use near_primitives::views::{ActionView, ChunkHeaderView, FinalExecutionStatus};
@@ -123,7 +124,7 @@ impl Client {
     pub async fn get_block(
         &mut self,
         bloch_kind: BlockKind,
-    ) -> anyhow::Result<(BlockHeight, Vec<ChunkHeaderView>)> {
+    ) -> anyhow::Result<(BlockHeight, Vec<ChunkHeaderView>, CryptoHash, CryptoHash)> {
         let block_reference = if let BlockKind::Height(height) = bloch_kind {
             BlockReference::BlockId(near_primitives::types::BlockId::Height(height))
         } else {
@@ -142,7 +143,7 @@ impl Client {
                 e
             })?;
 
-        Ok((block.header.height, block.chunks))
+        Ok((block.header.height, block.chunks, block.header.hash, block.header.prev_hash))
     }
 
     /// Get action output for chunk transaction (including receipt output)
