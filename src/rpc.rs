@@ -143,7 +143,12 @@ impl Client {
                 e
             })?;
 
-        Ok((block.header.height, block.chunks, block.header.hash, block.header.prev_hash))
+        Ok((
+            block.header.height,
+            block.chunks,
+            block.header.hash,
+            block.header.prev_hash,
+        ))
     }
 
     /// Get action output for chunk transaction (including receipt output)

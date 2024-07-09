@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::signal::unix::SignalKind;
-use tokio::time::{Instant, sleep};
+use tokio::time::{sleep, Instant};
 
 const SAVE_FILE_TIMEOUT: Duration = Duration::from_secs(60);
 const FORWARD_BLOCK_TIMEOUT: Duration = Duration::from_secs(120);
@@ -103,9 +103,11 @@ impl Indexer {
     ) {
         std::fs::write(data_file, data.try_to_vec().expect("Failed serialize"))
             .expect("Failed save indexed data");
-        println!(" [SAVE: current block: {current_block_height:?}, \
+        println!(
+            " [SAVE: current block: {current_block_height:?}, \
                           first handled block: {first_handled_block_height:?}, \
-                          last handled block: {last_handled_block_height:?}]");
+                          last handled block: {last_handled_block_height:?}]"
+        );
     }
 
     /// Set current index data
@@ -196,14 +198,17 @@ impl Indexer {
         let first_block = self.data.lock().unwrap().first_block;
         let (current_block, current_height) = if self.force_blocks {
             (None, 0)
-        } else if self.forward_block == None ||
-                  self.last_forward_time.elapsed() > FORWARD_BLOCK_TIMEOUT {
+        } else if self.forward_block == None
+            || self.last_forward_time.elapsed() > FORWARD_BLOCK_TIMEOUT
+        {
             self.last_forward_time = Instant::now();
             if let Ok(block) = client.get_block(BlockKind::Latest).await {
                 // Skip, if block already exists
                 if last_block > block.0 {
-                    println!("ERROR: last handled block cannot be bigger latest block. \
-                              Sleep: {FORWARD_BLOCK_TIMEOUT:?}");
+                    println!(
+                        "ERROR: last handled block cannot be bigger latest block. \
+                              Sleep: {FORWARD_BLOCK_TIMEOUT:?}"
+                    );
                     sleep(FORWARD_BLOCK_TIMEOUT).await;
                     return None;
                 }
@@ -249,8 +254,10 @@ impl Indexer {
         // Check, do we need fetch history data or force check from some block height
         let block = if self.force_index_from_block.is_some() || self.fetch_history {
             if num_height > current_height {
-                println!("Try to fetch block with height bigger than latest block. \
-                          Sleep: {FORWARD_BLOCK_TIMEOUT:?}");
+                println!(
+                    "Try to fetch block with height bigger than latest block. \
+                          Sleep: {FORWARD_BLOCK_TIMEOUT:?}"
+                );
                 sleep(FORWARD_BLOCK_TIMEOUT).await;
                 None
             } else if let Ok(block) = client.get_block(BlockKind::Height(num_height)).await {
@@ -286,7 +293,7 @@ impl Indexer {
             current_height,
             last_block,
             first_block,
-            block_hash
+            block_hash,
         );
 
         // Save data
