@@ -27,9 +27,6 @@ pub struct IndexerData {
 pub struct Indexer {
     pub data: Arc<Mutex<IndexerData>>,
     pub data_file: PathBuf,
-    pub fetch_history: bool,
-    pub force_index_from_block: Option<u64>,
-    pub force_blocks: bool,
     forward_block: Option<u64>,
     last_saved_time: Instant,
     last_forward_time: Instant,
@@ -39,27 +36,20 @@ impl Indexer {
     /// Init new indexer
     pub fn new<P: AsRef<Path>>(
         data_file: P,
-        fetch_history: bool,
-        block_height: Option<BlockHeight>,
-        force_blocks: bool,
+        block_height: BlockHeight,
     ) -> anyhow::Result<Self> {
         // If file doesn't exist just return default data
         let data = std::fs::read(&data_file).unwrap_or_default();
         let mut data = IndexerData::try_from_slice(&data).unwrap_or_default();
 
-        if let Some(height) = block_height {
-            data.last_block = height - 1;
-            if data.first_block > height {
-                data.first_block = height;
-            }
+        data.last_block = block_height.clone() - 1;
+        if data.first_block > block_height {
+            data.first_block = block_height.clone();
         }
 
         Ok(Self {
             data: Arc::new(Mutex::new(data)),
             data_file: data_file.as_ref().to_path_buf(),
-            fetch_history,
-            force_index_from_block: block_height,
-            force_blocks,
             forward_block: None,
             last_saved_time: Instant::now(),
             last_forward_time: Instant::now(),
@@ -113,20 +103,20 @@ impl Indexer {
     /// Set current index data
     pub fn set_indexed_data(
         &mut self,
-        height: BlockHeight,
         indexed_data: IndexedData,
         missed_blocks: HashSet<BlockHeight>,
         current_block: BlockHeight,
-        handled_block_height_range: (BlockHeight, BlockHeight),
+        first_block: BlockHeight,
+        last_block: BlockHeight,
         block_hash: CryptoHash,
     ) {
         let mut data = self.data.lock().unwrap();
-        data.first_block = handled_block_height_range.0;
+        data.first_block = first_block;
         if data.first_block == 0 {
-            data.first_block = height;
+            data.first_block = last_block;
         }
-        data.last_block = handled_block_height_range.1;
-        data.last_handled_block = height;
+        data.last_block = last_block;
+        data.last_handled_block = last_block;
         data.current_block = current_block;
         for account in indexed_data.accounts {
             data.data.accounts.insert(account);
@@ -193,84 +183,41 @@ impl Indexer {
 
     /// Handle fetching blocks
     async fn handle_block(&mut self, client: &mut Client) -> Option<tokio::task::JoinHandle<()>> {
-        let last_block = self.data.lock().unwrap().last_block;
+        let last_block = self.data.lock().unwrap().last_block + 1;
         let first_block = self.data.lock().unwrap().first_block;
-        let (current_block, current_height) = if self.force_blocks {
-            (None, 0)
-        } else if self.forward_block.is_none()
-            || self.last_forward_time.elapsed() > FORWARD_BLOCK_TIMEOUT
-        {
-            self.last_forward_time = Instant::now();
-            if let Ok(block) = client.get_block(BlockKind::Latest).await {
-                // Skip, if block already exists
-                if last_block > block.0 {
-                    println!(
-                        "ERROR: last handled block cannot be bigger latest block. \
-                              Sleep: {FORWARD_BLOCK_TIMEOUT:?}"
-                    );
-                    sleep(FORWARD_BLOCK_TIMEOUT).await;
-                    return None;
-                }
-                self.forward_block = Some(block.0);
-                (Some(block.clone()), block.0)
-            } else {
-                (None, 0)
-            }
-        } else {
-            (None, 0)
-        };
-
-        // Calculate Height to catch it. Depend on several parameters.
-        // 1. if it's just `index_from_block` - just linear increment `last_block`
-        // 2. for other cases cha
-        //   2.1. if `last_block > forward_block` - fetch history
-        //   2.2. if 2.1. false - fetch forward blocks
-        //   2.3. if `forward_block` - just fetch history
-        let (num_height, last_block, first_block) = if self.force_index_from_block.is_some() {
-            (last_block + 1, last_block + 1, first_block)
-        } else if let Some(forward_block) = self.forward_block {
-            if forward_block <= last_block + 1 {
-                self.forward_block = None;
-                (first_block - 1, last_block, first_block - 1)
-            } else {
-                (last_block + 1, last_block + 1, first_block)
-            }
-        } else {
-            (first_block - 1, last_block, first_block - 1)
-        };
-
-        // Get `current_height`
-        let current_height = if current_height == 0 {
+        let mut current_height =
             if let Some(height) = self.forward_block {
                 height
             } else {
                 0
-            }
-        } else {
-            current_height
-        };
+            };
 
-        // Check, do we need fetch history data or force check from some block height
-        let block = if self.force_index_from_block.is_some() || self.fetch_history {
-            if num_height > current_height {
+        if self.forward_block.is_none()
+            || self.last_forward_time.elapsed() > FORWARD_BLOCK_TIMEOUT {
+            self.last_forward_time = Instant::now();
+            if let Ok(block) = client.get_block(BlockKind::Latest).await {
+                self.forward_block = Some(block.0);
+                current_height = block.0
+            }
+        }
+
+        let block = if last_block > current_height {
                 println!(
                     "Try to fetch block with height bigger than latest block. \
                           Sleep: {FORWARD_BLOCK_TIMEOUT:?}"
                 );
                 sleep(FORWARD_BLOCK_TIMEOUT).await;
                 None
-            } else if let Ok(block) = client.get_block(BlockKind::Height(num_height)).await {
+            } else if let Ok(block) = client.get_block(BlockKind::Height(last_block)).await {
                 Some(block)
             } else {
                 // If block not found do not fail, just increment height
                 let mut data = self.data.lock().unwrap();
                 data.last_block = last_block;
                 None
-            }
-        } else {
-            current_block
-        };
-        let (height, chunks, block_hash, prev_block_hash) = block?;
+            };
+
+        let (_, chunks, block_hash, prev_block_hash) = block?;
 
         let last_block_hash = self.data.lock().unwrap().last_block_hash;
         if let Some(block_hash) = last_block_hash {
@@ -281,16 +228,16 @@ impl Indexer {
             }
         }
 
-        print!("\rHeight: {height:?}");
+        print!("\rHeight: {last_block:?}");
         std::io::stdout().flush().expect("Flush failed");
 
-        let indexed_data = client.get_chunk_indexed_data(chunks, height).await;
+        let indexed_data = client.get_chunk_indexed_data(chunks, last_block).await;
         self.set_indexed_data(
-            height,
             indexed_data,
             client.unresolved_blocks.clone(),
             current_height,
-            (first_block, last_block),
+            first_block,
+            last_block,
             block_hash,
         );
 
@@ -302,7 +249,7 @@ impl Indexer {
             let data = self.data.lock().unwrap().clone();
 
             Some(tokio::spawn(async move {
-                Self::save_data(&data, &data_file, current_block_height, first_block, height);
+                Self::save_data(&data, &data_file, current_block_height, first_block, last_block);
             }))
         } else {
             None

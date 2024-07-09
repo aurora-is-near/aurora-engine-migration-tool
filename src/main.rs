@@ -30,14 +30,6 @@ async fn main() -> anyhow::Result<()> {
             Command::new("indexer")
                 .about("Run indexing NEAR blockchain blocks and chunks for all shards, for specific NEAR network. For Aurora Engine contract.")
                 .arg(
-                    arg!(-H --history "Indexing missed historical blocks")
-                        .action(ArgAction::SetTrue),
-                )
-                .arg(
-                    arg!(-F --force "Force get blocks without check current block for historical and specific block indexing")
-                        .action(ArgAction::SetTrue),
-                )
-                .arg(
                     arg!(-s --stat "Show short indexed statistic")
                         .action(ArgAction::SetTrue),
                 )
@@ -47,6 +39,7 @@ async fn main() -> anyhow::Result<()> {
                 )
                 .arg(
                     arg!(-b --block <BLOCK_HEIGHT> "Start indexing from specific block")
+                        .required(true)
                         .value_parser(value_parser!(u64)),
                 ),
         )
@@ -141,12 +134,10 @@ async fn main() -> anyhow::Result<()> {
             parser::parse(snapshot_json_file, output)?;
         }
         Some(("indexer", cmd)) => {
-            let history = cmd.get_flag("history");
-            let force = cmd.get_flag("force");
             let stat = cmd.get_flag("stat");
             let fullstat = cmd.get_flag("fullstat");
-            let block = cmd.get_one::<u64>("block").copied();
-            let mut indexer = Indexer::new("data.borsh", history, block, force)?;
+            let block = cmd.get_one::<u64>("block").copied().expect("Expected start block height");
+            let mut indexer = Indexer::new("data.borsh", block)?;
 
             if stat {
                 indexer.stats(false).await;
