@@ -117,17 +117,16 @@ impl Indexer {
         indexed_data: IndexedData,
         missed_blocks: HashSet<BlockHeight>,
         current_block: BlockHeight,
-        last_block: BlockHeight,
-        first_block: BlockHeight,
+        handled_block_height_range: (BlockHeight, BlockHeight),
         block_hash: CryptoHash,
     ) {
         let mut data = self.data.lock().unwrap();
-        data.first_block = first_block;
+        data.first_block = handled_block_height_range.0;
         if data.first_block == 0 {
             data.first_block = height;
         }
-        data.last_block = last_block;
-        data.last_handled_block = last_block;
+        data.last_block = handled_block_height_range.1;
+        data.last_handled_block = height;
         data.current_block = current_block;
         for account in indexed_data.accounts {
             data.data.accounts.insert(account);
@@ -198,7 +197,7 @@ impl Indexer {
         let first_block = self.data.lock().unwrap().first_block;
         let (current_block, current_height) = if self.force_blocks {
             (None, 0)
-        } else if self.forward_block == None
+        } else if self.forward_block.is_none()
             || self.last_forward_time.elapsed() > FORWARD_BLOCK_TIMEOUT
         {
             self.last_forward_time = Instant::now();
@@ -291,8 +290,7 @@ impl Indexer {
             indexed_data,
             client.unresolved_blocks.clone(),
             current_height,
-            last_block,
-            first_block,
+            (first_block, last_block),
             block_hash,
         );
 
