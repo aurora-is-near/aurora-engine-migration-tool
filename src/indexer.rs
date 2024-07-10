@@ -241,7 +241,7 @@ impl Indexer {
 
         // Get `current_height`
         let current_height = if current_height == 0 {
-             self.forward_block.unwrap_or_default()
+            self.forward_block.unwrap_or_default()
         } else {
             current_height
         };
@@ -249,9 +249,7 @@ impl Indexer {
         // Check, do we need fetch history data or force check from some block height
         let block = if self.force_index_from_block.is_some() || self.fetch_history {
             if num_height > current_height {
-                println!(
-                    "Reached the latest block. Sleep: {FORWARD_BLOCK_TIMEOUT:?}"
-                );
+                println!("Reached the latest block. Sleep: {FORWARD_BLOCK_TIMEOUT:?}");
                 sleep(FORWARD_BLOCK_TIMEOUT).await;
                 None
             } else if let Ok(block) = client.get_block(BlockKind::Height(num_height)).await {
