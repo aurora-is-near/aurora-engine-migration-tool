@@ -241,11 +241,7 @@ impl Indexer {
 
         // Get `current_height`
         let current_height = if current_height == 0 {
-            if let Some(height) = self.forward_block {
-                height
-            } else {
-                0
-            }
+             self.forward_block.unwrap_or_default()
         } else {
             current_height
         };
