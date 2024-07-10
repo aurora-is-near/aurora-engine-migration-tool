@@ -250,8 +250,7 @@ impl Indexer {
         let block = if self.force_index_from_block.is_some() || self.fetch_history {
             if num_height > current_height {
                 println!(
-                    "Try to fetch block with height bigger than latest block. \
-                          Sleep: {FORWARD_BLOCK_TIMEOUT:?}"
+                    "Reached the latest block. Sleep: {FORWARD_BLOCK_TIMEOUT:?}"
                 );
                 sleep(FORWARD_BLOCK_TIMEOUT).await;
                 None
