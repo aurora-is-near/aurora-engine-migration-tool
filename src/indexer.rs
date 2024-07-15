@@ -13,22 +13,37 @@ use tokio::time::{sleep, Instant};
 const SAVE_FILE_TIMEOUT: Duration = Duration::from_secs(60);
 const FORWARD_BLOCK_TIMEOUT: Duration = Duration::from_secs(120);
 
+// Information about indexed data that is saved to a file
+// and will be loaded from the file when the program restarts.
 #[derive(Debug, Default, Clone, BorshSerialize, BorshDeserialize)]
 pub struct IndexerData {
+    // Height of the first indexed block
     pub first_block: BlockHeight,
+    // Height of the last block we attempted to index.
+    // In the next iteration, we will index the block last_block + 1.
     pub last_block: BlockHeight,
+    // Height of the last block we successfully indexed
     pub last_handled_block: BlockHeight,
+    // The latest block in the NEAR network at the time of indexing.
     pub current_block: BlockHeight,
+    // Hash of the last successfully processed block with the height last_handled_block.
     pub last_block_hash: Option<CryptoHash>,
+    // A set of blocks that could not be successfully processed.
     pub missed_blocks: HashSet<BlockHeight>,
+    // Indexed data: a list of accounts, proofs, and so on.
     pub data: IndexedData,
 }
 
 pub struct Indexer {
+    // Data that is saved to a file every SAVE_FILE_TIMEOUT interval.
     pub data: Arc<Mutex<IndexerData>>,
+    // The file in which the data is saved.
     pub data_file: PathBuf,
+    // Height of the latest block in NEAR.
     forward_block: Option<u64>,
+    // The time when the data was last saved to the file.
     last_saved_time: Instant,
+    // The time when the height of the latest block in NEAR was last retrieved.
     last_forward_time: Instant,
 }
 
