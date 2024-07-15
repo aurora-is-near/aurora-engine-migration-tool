@@ -39,7 +39,6 @@ async fn main() -> anyhow::Result<()> {
                 )
                 .arg(
                     arg!(-b --block <BLOCK_HEIGHT> "Start indexing from specific block")
-                        .required(true)
                         .value_parser(value_parser!(u64)),
                 ),
         )
@@ -136,17 +135,17 @@ async fn main() -> anyhow::Result<()> {
         Some(("indexer", cmd)) => {
             let stat = cmd.get_flag("stat");
             let fullstat = cmd.get_flag("fullstat");
-            let block = cmd
-                .get_one::<u64>("block")
-                .copied()
-                .expect("Expected start block height");
-            let mut indexer = Indexer::new("data.borsh", block)?;
 
-            if stat {
-                indexer.stats(false).await;
-            } else if fullstat {
-                indexer.stats(true).await;
+            if stat || fullstat {
+                let indexer = Indexer::new("data.borsh", None)?;
+                indexer.stats(fullstat).await;
             } else {
+                let block = cmd
+                    .get_one::<u64>("block")
+                    .copied()
+                    .expect("Expected start block height");
+
+                let mut indexer = Indexer::new("data.borsh", Some(block))?;
                 indexer.run().await?;
             }
         }

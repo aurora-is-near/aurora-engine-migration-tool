@@ -34,14 +34,16 @@ pub struct Indexer {
 
 impl Indexer {
     /// Init new indexer
-    pub fn new<P: AsRef<Path>>(data_file: P, block_height: BlockHeight) -> anyhow::Result<Self> {
+    pub fn new<P: AsRef<Path>>(data_file: P, block_height: Option<BlockHeight>) -> anyhow::Result<Self> {
         // If file doesn't exist just return default data
         let data = std::fs::read(&data_file).unwrap_or_default();
         let mut data = IndexerData::try_from_slice(&data).unwrap_or_default();
 
-        data.last_block = block_height - 1;
-        if data.first_block > block_height {
-            data.first_block = block_height;
+        if let Some(block_height) = block_height {
+            data.last_block = block_height - 1;
+            if data.first_block > block_height {
+                data.first_block = block_height;
+            }
         }
 
         Ok(Self {
