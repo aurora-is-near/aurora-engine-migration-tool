@@ -49,7 +49,10 @@ pub struct Indexer {
 
 impl Indexer {
     /// Init new indexer
-    pub fn new<P: AsRef<Path>>(data_file: P, block_height: Option<BlockHeight>) -> anyhow::Result<Self> {
+    pub fn new<P: AsRef<Path>>(
+        data_file: P,
+        block_height: Option<BlockHeight>,
+    ) -> anyhow::Result<Self> {
         // If file doesn't exist just return default data
         let data = std::fs::read(&data_file).unwrap_or_default();
         let mut data = IndexerData::try_from_slice(&data).unwrap_or_default();
