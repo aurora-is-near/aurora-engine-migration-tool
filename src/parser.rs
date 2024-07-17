@@ -82,6 +82,8 @@ pub fn parse<P: AsRef<Path>>(json_file: P, output: Option<P>) -> anyhow::Result<
         }
     }
     println!("Accounts: {}", accounts.len());
+    println!("Total supply: {}", contract_data.total_eth_supply_on_near);
+    println!("Total stuck supply: {}", total_stuck_supply);
 
     // Store result data
     StateData {
