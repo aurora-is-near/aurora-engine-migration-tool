@@ -189,14 +189,9 @@ async fn main() -> anyhow::Result<()> {
                 .get_one::<String>("contract")
                 .expect("Expected account-id");
 
-            Migration::new(
-                data_file,
-                contract_account_id.clone(),
-                None,
-                None,
-            )?
-            .validate_migration()
-            .await?;
+            Migration::new(data_file, contract_account_id.clone(), None, None)?
+                .validate_migration()
+                .await?;
         }
         _ => (),
     }

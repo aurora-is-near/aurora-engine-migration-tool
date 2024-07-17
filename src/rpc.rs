@@ -191,11 +191,7 @@ impl Client {
     /// `storage_unregister` - use `predecessor_account_id` (that catch in
     /// other flow), just for log.
     #[must_use]
-    pub fn parse_action_argument(
-        &self,
-        method: &str,
-        args: &[u8],
-    ) -> Vec<AccountId> {
+    pub fn parse_action_argument(&self, method: &str, args: &[u8]) -> Vec<AccountId> {
         use serde::Deserialize;
 
         match method {
@@ -282,7 +278,7 @@ impl Client {
                 print_log("storage_unregister");
                 vec![]
             }
-            _ => vec![]
+            _ => vec![],
         }
     }
 
