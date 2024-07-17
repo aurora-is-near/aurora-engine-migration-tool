@@ -68,14 +68,12 @@ pub enum BlockKind {
 #[derive(Debug, Default, Clone, BorshSerialize, BorshDeserialize)]
 pub struct ActionResultLog {
     pub accounts: Vec<AccountId>,
-    pub proof: String,
     pub method: String,
 }
 
 #[derive(Debug, Default, Clone, BorshSerialize, BorshDeserialize)]
 pub struct ActionResult {
     pub accounts: Vec<AccountId>,
-    pub proofs: Vec<String>,
     pub is_action_found: bool,
     pub log: Vec<ActionResultLog>,
 }
@@ -89,7 +87,6 @@ pub struct IndexedResultLog {
 #[derive(Debug, Default, Clone, BorshSerialize, BorshDeserialize)]
 pub struct IndexedData {
     pub accounts: HashSet<AccountId>,
-    pub proofs: HashSet<String>,
     pub logs: Vec<IndexedResultLog>,
 }
 
@@ -152,7 +149,7 @@ impl Client {
     }
 
     /// Get action output for chunk transaction (including receipt output)
-    /// It includes: Accounts, Proof keys
+    /// It includes: Accounts
     pub fn get_actions_data(&mut self, actions: Vec<ActionView>) -> ActionResult {
         let mut result = ActionResult::default();
 
@@ -163,19 +160,14 @@ impl Client {
             } = action
             {
                 if ACTION_METHODS.contains(&method_name.as_str()) {
-                    let (accounts, proof) = self.parse_action_argument(&method_name, &args);
+                    let accounts = self.parse_action_argument(&method_name, &args);
 
                     result.is_action_found = true;
                     result.log.push(ActionResultLog {
                         accounts: accounts.clone(),
-                        proof: proof.clone().unwrap_or_default(),
                         method: method_name,
                     });
                     result.accounts.extend(accounts);
-
-                    if let Some(proof) = proof {
-                        result.proofs.push(proof);
-                    }
                 }
             }
         }
@@ -183,11 +175,11 @@ impl Client {
         result
     }
 
-    /// Parse action arguments and return accounts and proof keys
+    /// Parse action arguments and return accounts
     /// Main goal is gather all accounts that can be modified.
     /// In `aurora-eth-connector` migration just receive balances
     /// for modified accounts. So main goals is just catch modified
-    /// accounts, and proof-key for `finish_deposit`.
+    /// accounts.
     ///
     /// `deposit` function catch just for log information.
     ///
@@ -203,7 +195,7 @@ impl Client {
         &self,
         method: &str,
         args: &[u8],
-    ) -> (Vec<AccountId>, Option<String>) {
+    ) -> Vec<AccountId> {
         use serde::Deserialize;
 
         match method {
@@ -216,10 +208,10 @@ impl Client {
                 }
                 if let Ok(res) = serde_json::from_slice::<FtTransferArgs>(args) {
                     print_log("ft_transfer");
-                    (vec![res.receiver_id], None)
+                    vec![res.receiver_id]
                 } else {
                     print_log(" Failed deserialize FtTransferArgs");
-                    (vec![], None)
+                    vec![]
                 }
             }
             "ft_transfer_call" => {
@@ -232,15 +224,15 @@ impl Client {
                 }
                 if let Ok(res) = serde_json::from_slice::<FtTransferCallArgs>(args) {
                     print_log("ft_transfer_call");
-                    (vec![res.receiver_id], None)
+                    vec![res.receiver_id]
                 } else {
                     print_log("Failed deserialize FtTransferCallArgs");
-                    (vec![], None)
+                    vec![]
                 }
             }
             "withdraw" => {
                 print_log(" Withdraw");
-                (vec![], None)
+                vec![]
             }
             "finish_deposit" => {
                 #[derive(Debug, Clone, BorshDeserialize)]
@@ -254,15 +246,15 @@ impl Client {
                 }
                 if let Ok(res) = FinishDepositArgs::try_from_slice(args) {
                     print_log("finish_deposit");
-                    (vec![res.new_owner_id, res.relayer_id], Some(res.proof_key))
+                    vec![res.new_owner_id, res.relayer_id]
                 } else {
                     print_log("Failed deserialize FinishDepositArgs");
-                    (vec![], None)
+                    vec![]
                 }
             }
             "deposit" => {
                 print_log("deposit");
-                (vec![], None)
+                vec![]
             }
             "storage_deposit" => {
                 #[derive(Debug, Clone, Deserialize)]
@@ -273,24 +265,24 @@ impl Client {
                 if let Ok(res) = serde_json::from_slice::<StorageDepositArgs>(args) {
                     print_log("storage_deposit");
                     if let Some(account_id) = res.account_id {
-                        (vec![account_id], None)
+                        vec![account_id]
                     } else {
-                        (vec![], None)
+                        vec![]
                     }
                 } else {
                     print_log("Failed deserialize FinishDepositArgs");
-                    (vec![], None)
+                    vec![]
                 }
             }
             "storage_withdraw" => {
                 print_log("storage_withdraw");
-                (vec![], None)
+                vec![]
             }
             "storage_unregister" => {
                 print_log("storage_unregister");
-                (vec![], None)
+                vec![]
             }
-            _ => (vec![], None),
+            _ => vec![]
         }
     }
 
@@ -309,7 +301,6 @@ impl Client {
     ) -> IndexedData {
         let mut results = IndexedData {
             accounts: HashSet::new(),
-            proofs: HashSet::new(),
             logs: vec![],
         };
 
@@ -337,7 +328,7 @@ impl Client {
                 if tx.receiver_id.as_str() != AURORA_CONTRACT {
                     continue;
                 }
-                // Get actions and proof keys from transaction
+                // Get actions from transaction
                 let res = self.get_actions_data(tx.actions.clone());
 
                 // Added predecessor account. It's especially important
@@ -364,9 +355,6 @@ impl Client {
                 }
                 for account in res.accounts {
                     results.accounts.insert(account);
-                }
-                for proof in res.proofs {
-                    results.proofs.insert(proof);
                 }
             }
 
@@ -416,9 +404,6 @@ impl Client {
                     }
                     for account in res.accounts {
                         results.accounts.insert(account);
-                    }
-                    for proof in res.proofs {
-                        results.proofs.insert(proof);
                     }
                 }
             }

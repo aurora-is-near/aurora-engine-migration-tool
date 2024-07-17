@@ -30,7 +30,7 @@ pub struct IndexerData {
     pub last_block_hash: Option<CryptoHash>,
     // A set of blocks that could not be successfully processed.
     pub missed_blocks: HashSet<BlockHeight>,
-    // Indexed data: a list of accounts, proofs, and so on.
+    // Indexed data: a list of accounts.
     pub data: IndexedData,
 }
 
@@ -97,7 +97,6 @@ impl Indexer {
         println!("Current block: {height:?}");
         println!("Missed blocks: {}", data.missed_blocks.len());
         println!("Accounts: {}", data.data.accounts.len());
-        println!("Proofs: {}", data.data.proofs.len());
     }
 
     /// Save indexed data
@@ -137,9 +136,6 @@ impl Indexer {
         data.current_block = current_block;
         for account in indexed_data.accounts {
             data.data.accounts.insert(account);
-        }
-        for proof in indexed_data.proofs {
-            data.data.proofs.insert(proof);
         }
         let mut logs = indexed_data.logs;
         data.data.logs.append(&mut logs);
