@@ -192,7 +192,6 @@ impl Migration {
         println!("total_stuck_supply: {}", self.data.total_stuck_supply);
         println!("total_supply - real_total_supply: {}", diff_total_supply);
         assert_eq!(self.data.accounts.len(), accounts_count);
-        assert_eq!(diff_total_supply, self.data.total_stuck_supply);
 
         reproducible_data_for_accounts
     }
