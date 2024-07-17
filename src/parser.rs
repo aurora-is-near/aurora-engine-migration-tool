@@ -50,6 +50,7 @@ pub fn parse<P: AsRef<Path>>(json_file: P, output: Option<P>) -> anyhow::Result<
     let mut accounts: HashMap<AccountId, NEP141Wei> = HashMap::new();
     let mut contract_data: FungibleToken = FungibleToken::default();
     let mut total_stuck_supply = NEP141Wei::new(0);
+    let mut real_total_supply = NEP141Wei::new(0);
 
     for result_value in &json_data.result.values {
         let key = base64::decode(&result_value.key)
@@ -69,6 +70,7 @@ pub fn parse<P: AsRef<Path>>(json_file: P, output: Option<P>) -> anyhow::Result<
                     println!("\tNot fetched account: {account_str} with balance {account_balance}");
                     continue;
                 };
+                real_total_supply = real_total_supply + account_balance;
                 accounts.insert(account, account_balance);
             }
             KeyType::Contract => {
@@ -81,13 +83,22 @@ pub fn parse<P: AsRef<Path>>(json_file: P, output: Option<P>) -> anyhow::Result<
             KeyType::Unknown => (), //anyhow::bail!("Unknown key type"),
         }
     }
-    println!("Accounts: {}", accounts.len());
-    println!("Total supply: {}", contract_data.total_eth_supply_on_near);
-    println!("Total stuck supply: {}", total_stuck_supply);
+
+    let total_supply = contract_data.total_eth_supply_on_near;
+    println!("num_of_accounts: {}", accounts.len());
+    println!("total_supply: {total_supply}");
+    println!("real_total_supply: {real_total_supply}");
+    println!("total_stuck_supply: {total_stuck_supply}");
+    println!(
+        "total_supply - real_total_supply: {}",
+        total_supply
+            .checked_sub(real_total_supply)
+            .expect("Real total supply cannot be higher than the total supply")
+    );
 
     // Store result data
     StateData {
-        total_supply: contract_data.total_eth_supply_on_near,
+        total_supply,
         total_stuck_supply,
         accounts,
     }
