@@ -14,8 +14,8 @@ const MIGRATION_CHECK_METHOD: &str = "check_migration_correctness";
 const RECORDS_COUNT_PER_TX: usize = 750;
 
 pub struct MigrationConfig {
-    pub signer_account_id: String,
-    pub signer_secret_key: String,
+    pub signer_account_id: Option<String>,
+    pub signer_secret_key: Option<String>,
     pub contract: String,
 }
 
@@ -43,8 +43,8 @@ impl Migration {
     pub fn new<P: AsRef<Path>>(
         data_file: P,
         contract_account_id: String,
-        signer_account_id: String,
-        signer_secret_key: String,
+        signer_account_id: Option<String>,
+        signer_secret_key: Option<String>,
     ) -> anyhow::Result<Self> {
         let data = std::fs::read(data_file).unwrap_or_default();
         let data: StateData = StateData::try_from_slice(&data)?;
@@ -69,8 +69,8 @@ impl Migration {
     ) -> anyhow::Result<()> {
         self.client
             .commit_tx(
-                self.config.signer_account_id.clone(),
-                self.config.signer_secret_key.clone(),
+                self.config.signer_account_id.clone().unwrap(),
+                self.config.signer_secret_key.clone().unwrap(),
                 self.config.contract.clone(),
                 MIGRATION_METHOD.to_string(),
                 migration_data,

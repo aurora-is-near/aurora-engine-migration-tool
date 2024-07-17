@@ -108,14 +108,6 @@ async fn main() -> anyhow::Result<()> {
                     arg!(-c --contract <ACCOUNT_ID> "Account ID of aurora-eth-connector")
                         .required(true),
                 )
-                .arg(
-                arg!(-s --signer <ACCOUNT_ID> "Signer Account ID")
-                    .required(true),
-                )
-                .arg(
-                    arg!(-k --key <ACCOUNT_KEY> "Account private key for sign transactions")
-                        .required(true),
-                )
         )
         .get_matches();
 
@@ -163,8 +155,8 @@ async fn main() -> anyhow::Result<()> {
             Migration::new(
                 data_file,
                 contract_account_id.clone(),
-                signer_account_id.clone(),
-                signer_account_key.clone(),
+                Some(signer_account_id.clone()),
+                Some(signer_account_key.clone()),
             )?
             .run()
             .await?;
@@ -196,16 +188,12 @@ async fn main() -> anyhow::Result<()> {
             let contract_account_id = cmd
                 .get_one::<String>("contract")
                 .expect("Expected account-id");
-            let signer_account_id = cmd
-                .get_one::<String>("signer")
-                .expect("Expected account-id");
-            let signer_account_key = cmd.get_one::<String>("key").expect("Expected account-key");
 
             Migration::new(
                 data_file,
                 contract_account_id.clone(),
-                signer_account_id.clone(),
-                signer_account_key.clone(),
+                None,
+                None,
             )?
             .validate_migration()
             .await?;
