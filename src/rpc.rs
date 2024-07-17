@@ -474,6 +474,12 @@ impl Client {
             })],
         };
 
+        println!(
+            "nonce: {}, tx_hash: {:#?}",
+            transaction.nonce,
+            transaction.get_hash_and_size().0
+        );
+
         let request = methods::broadcast_tx_commit::RpcBroadcastTxCommitRequest {
             signed_transaction: transaction.sign(&signer),
         };
