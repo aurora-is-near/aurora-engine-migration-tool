@@ -30,14 +30,6 @@ async fn main() -> anyhow::Result<()> {
             Command::new("indexer")
                 .about("Run indexing NEAR blockchain blocks and chunks for all shards, for specific NEAR network. For Aurora Engine contract.")
                 .arg(
-                    arg!(-H --history "Indexing missed historical blocks")
-                        .action(ArgAction::SetTrue),
-                )
-                .arg(
-                    arg!(-F --force "Force get blocks without check current block for historical and specific block indexing")
-                        .action(ArgAction::SetTrue),
-                )
-                .arg(
                     arg!(-s --stat "Show short indexed statistic")
                         .action(ArgAction::SetTrue),
                 )
@@ -116,14 +108,6 @@ async fn main() -> anyhow::Result<()> {
                     arg!(-c --contract <ACCOUNT_ID> "Account ID of aurora-eth-connector")
                         .required(true),
                 )
-                .arg(
-                arg!(-s --signer <ACCOUNT_ID> "Signer Account ID")
-                    .required(true),
-                )
-                .arg(
-                    arg!(-k --key <ACCOUNT_KEY> "Account private key for sign transactions")
-                        .required(true),
-                )
         )
         .get_matches();
 
@@ -141,18 +125,19 @@ async fn main() -> anyhow::Result<()> {
             parser::parse(snapshot_json_file, output)?;
         }
         Some(("indexer", cmd)) => {
-            let history = cmd.get_flag("history");
-            let force = cmd.get_flag("force");
             let stat = cmd.get_flag("stat");
             let fullstat = cmd.get_flag("fullstat");
-            let block = cmd.get_one::<u64>("block").copied();
-            let mut indexer = Indexer::new("data.borsh", history, block, force)?;
 
-            if stat {
-                indexer.stats(false).await;
-            } else if fullstat {
-                indexer.stats(true).await;
+            if stat || fullstat {
+                let indexer = Indexer::new("data.borsh", None)?;
+                indexer.stats(fullstat).await;
             } else {
+                let block = cmd
+                    .get_one::<u64>("block")
+                    .copied()
+                    .expect("Expected start block height");
+
+                let mut indexer = Indexer::new("data.borsh", Some(block))?;
                 indexer.run().await?;
             }
         }
@@ -170,8 +155,8 @@ async fn main() -> anyhow::Result<()> {
             Migration::new(
                 data_file,
                 contract_account_id.clone(),
-                signer_account_id.clone(),
-                signer_account_key.clone(),
+                Some(signer_account_id.clone()),
+                Some(signer_account_key.clone()),
             )?
             .run()
             .await?;
@@ -203,19 +188,10 @@ async fn main() -> anyhow::Result<()> {
             let contract_account_id = cmd
                 .get_one::<String>("contract")
                 .expect("Expected account-id");
-            let signer_account_id = cmd
-                .get_one::<String>("signer")
-                .expect("Expected account-id");
-            let signer_account_key = cmd.get_one::<String>("key").expect("Expected account-key");
 
-            Migration::new(
-                data_file,
-                contract_account_id.clone(),
-                signer_account_id.clone(),
-                signer_account_key.clone(),
-            )?
-            .validate_migration()
-            .await?;
+            Migration::new(data_file, contract_account_id.clone(), None, None)?
+                .validate_migration()
+                .await?;
         }
         _ => (),
     }

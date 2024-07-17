@@ -112,8 +112,6 @@ Run indexing NEAR blockchain blocks and chunks for all shards, for specific NEAR
 Usage: aurora-engine-migration-tool indexer [OPTIONS]
 
 Options:
-  -H, --history               Indexing missed historical blocks
-  -F, --force                 Force get blocks without check current block for historical and specific block indexing
   -s, --stat                  Show short indexed statistic
       --fullstat              Show full indexed statistic
   -b, --block <BLOCK_HEIGHT>  Start indexing from specific block
