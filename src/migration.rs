@@ -3,11 +3,13 @@ use aurora_engine_migration_tool::StateData;
 use aurora_engine_types::types::NEP141Wei;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::U128;
-use near_sdk::{AccountId, Balance};
+use near_sdk::{AccountId};
 use serde_json::json;
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::Path;
+
+type Balance = u128;
 
 const MIGRATION_METHOD: &str = "migrate";
 const MIGRATION_CHECK_METHOD: &str = "check_migration_correctness";
@@ -123,11 +125,10 @@ impl Migration {
     ) -> anyhow::Result<()> {
         println!("Num of batches: {}", reproducible_data_for_accounts.len());
         for (accounts, counter) in reproducible_data_for_accounts {
-            let migration_data = MigrationInputData {
+            let migration_data = borsh::to_vec(&MigrationInputData {
                 accounts: accounts.clone(),
                 total_supply: None,
-            }
-            .try_to_vec()
+            })
             .expect("Failed serialize");
 
             self.check_migration("Accounts:", migration_data, counter)
@@ -135,13 +136,12 @@ impl Migration {
         }
 
         println!();
-        let contract_migration_data = MigrationInputData {
+        let contract_migration_data = borsh::to_vec(&MigrationInputData {
             accounts: HashMap::new(),
             total_supply: Some(
                 self.data.total_supply.as_u128() - self.data.total_stuck_supply.as_u128(),
             ),
-        }
-        .try_to_vec()
+        })
         .expect("Failed serialize");
 
         println!(
@@ -215,7 +215,7 @@ impl Migration {
                 migration_data.len()
             );
             self.commit_migration(
-                migration_data.try_to_vec().expect("Failed serialize"),
+                borsh::to_vec(&migration_data).expect("Failed serialize"),
                 "Accounts",
                 *accounts_count,
             )
@@ -270,8 +270,7 @@ impl Migration {
         println!("Accounts: {:?}", migration_data.accounts.len());
         println!("Total supply: {:?}", migration_data.total_supply.as_u128());
 
-        migration_data
-            .try_to_vec()
+        borsh::to_vec(&migration_data)
             .and_then(|data| std::fs::write(output, data))
             .map_err(|e| anyhow::anyhow!("Failed save migration data, {e}"))
     }
@@ -307,8 +306,7 @@ impl Migration {
             state_data.total_stuck_supply.as_u128()
         );
 
-        state_data
-            .try_to_vec()
+        borsh::to_vec(&state_data)
             .and_then(|data| std::fs::write(output, data))
             .map_err(|e| anyhow::anyhow!("Failed save migration data, {e}"))
     }

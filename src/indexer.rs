@@ -107,7 +107,7 @@ impl Indexer {
         first_handled_block_height: BlockHeight,
         last_handled_block_height: BlockHeight,
     ) {
-        std::fs::write(data_file, data.try_to_vec().expect("Failed serialize"))
+        std::fs::write(data_file, borsh::to_vec(&data).expect("Failed serialize"))
             .expect("Failed save indexed data");
         println!(
             " [SAVE: current block: {current_block_height:?}, \

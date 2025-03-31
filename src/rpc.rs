@@ -4,7 +4,7 @@
 use near_jsonrpc_client::{methods, JsonRpcClient, MethodCallResult};
 use near_jsonrpc_primitives::types::query::QueryResponseKind;
 use near_primitives::hash::CryptoHash;
-use near_primitives::transaction::{Action, FunctionCallAction, Transaction};
+use near_primitives::transaction::{Action, FunctionCallAction, Transaction, TransactionV0};
 use near_primitives::types::{BlockHeight, BlockReference};
 use near_primitives::views::{ActionView, ChunkHeaderView, FinalExecutionStatus};
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
@@ -434,8 +434,8 @@ impl Client {
             .call(methods::query::RpcQueryRequest {
                 block_reference: BlockReference::latest(),
                 request: near_primitives::views::QueryRequest::ViewAccessKey {
-                    account_id: signer.account_id.clone(),
-                    public_key: signer.public_key.clone(),
+                    account_id: signer.get_account_id().clone(),
+                    public_key: signer.public_key().clone(),
                 },
             })
             .await?;
@@ -447,23 +447,23 @@ impl Client {
         };
 
         // Prepare transaction to commit
-        let transaction = Transaction {
-            signer_id: signer.account_id.clone(),
-            public_key: signer.public_key.clone(),
+        let transaction = Transaction::V0(TransactionV0 {
+            signer_id: signer.get_account_id().clone(),
+            public_key: signer.public_key().clone(),
             nonce: current_nonce + 1,
             receiver_id: contract.parse()?,
             block_hash: access_key_query_response.block_hash,
-            actions: vec![Action::FunctionCall(FunctionCallAction {
+            actions: vec![Action::FunctionCall(Box::from(FunctionCallAction {
                 method_name: method,
                 args,
                 gas: GAS_FOR_COMMIT_TX,
                 deposit: 0,
-            })],
-        };
+            }))]
+        });
 
         println!(
             "nonce: {}, tx_hash: {:#?}",
-            transaction.nonce,
+            transaction.nonce(),
             transaction.get_hash_and_size().0
         );
 
