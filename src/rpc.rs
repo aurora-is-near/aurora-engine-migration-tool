@@ -130,14 +130,13 @@ impl Client {
         let block = self
             .call(methods::block::RpcBlockRequest { block_reference })
             .await
-            .map_err(|e| {
+            .inspect_err(|_e| {
                 let mut msg = "Failed get block".to_string();
                 if let BlockKind::Height(height) = bloch_kind {
                     self.unresolved_blocks.insert(height);
                     msg = format!("{msg}: {height:?}");
                 }
                 print_log(&msg);
-                e
             })?;
 
         Ok((
@@ -199,7 +198,9 @@ impl Client {
                 #[derive(Debug, Deserialize)]
                 pub struct FtTransferArgs {
                     pub receiver_id: AccountId,
+                    #[allow(dead_code)]
                     pub amount: U128,
+                    #[allow(dead_code)]
                     pub memo: Option<String>,
                 }
                 if let Ok(res) = serde_json::from_slice::<FtTransferArgs>(args) {
@@ -214,8 +215,11 @@ impl Client {
                 #[derive(Debug, Deserialize)]
                 pub struct FtTransferCallArgs {
                     pub receiver_id: AccountId,
+                    #[allow(dead_code)]
                     pub amount: U128,
+                    #[allow(dead_code)]
                     pub memo: Option<String>,
+                    #[allow(dead_code)]
                     pub msg: String,
                 }
                 if let Ok(res) = serde_json::from_slice::<FtTransferCallArgs>(args) {
@@ -230,32 +234,11 @@ impl Client {
                 print_log(" Withdraw");
                 vec![]
             }
-            "finish_deposit" => {
-                #[derive(Debug, Clone, BorshDeserialize)]
-                pub struct FinishDepositArgs {
-                    pub new_owner_id: AccountId,
-                    pub amount: u128,
-                    pub proof_key: String,
-                    pub relayer_id: AccountId,
-                    pub fee: u128,
-                    pub msg: Option<Vec<u8>>,
-                }
-                if let Ok(res) = FinishDepositArgs::try_from_slice(args) {
-                    print_log("finish_deposit");
-                    vec![res.new_owner_id, res.relayer_id]
-                } else {
-                    print_log("Failed deserialize FinishDepositArgs");
-                    vec![]
-                }
-            }
-            "deposit" => {
-                print_log("deposit");
-                vec![]
-            }
             "storage_deposit" => {
                 #[derive(Debug, Clone, Deserialize)]
                 pub struct StorageDepositArgs {
                     pub account_id: Option<AccountId>,
+                    #[allow(dead_code)]
                     pub registration_only: Option<bool>,
                 }
                 if let Ok(res) = serde_json::from_slice::<StorageDepositArgs>(args) {

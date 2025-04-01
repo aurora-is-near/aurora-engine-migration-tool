@@ -105,7 +105,7 @@ dependencies = [
 
 [[package]]
 name = "aurora-engine-migration-tool"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "anyhow",
  "aurora-engine-types",
