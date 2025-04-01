@@ -3,7 +3,7 @@ use aurora_engine_migration_tool::StateData;
 use aurora_engine_types::types::NEP141Wei;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::U128;
-use near_sdk::{AccountId};
+use near_sdk::AccountId;
 use serde_json::json;
 use std::collections::HashMap;
 use std::io::Write;

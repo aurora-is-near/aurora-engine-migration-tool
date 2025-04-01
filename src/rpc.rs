@@ -458,7 +458,7 @@ impl Client {
                 args,
                 gas: GAS_FOR_COMMIT_TX,
                 deposit: 0,
-            }))]
+            }))],
         });
 
         println!(
