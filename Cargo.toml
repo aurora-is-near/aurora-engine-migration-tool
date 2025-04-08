@@ -1,6 +1,6 @@
 [package]
 name = "aurora-engine-migration-tool"
-version = "0.2.2"
+version = "0.2.3"
 authors = ["Aurora Labs <hello@aurora.dev>", "Evgeny Ukhanov <evgeny@aurora.dev>"]
 edition = "2021"
 description = "Aurora Engine migration tools"
@@ -13,19 +13,20 @@ publish = false
 autobenches = false
 
 [dependencies]
-aurora-engine-types = { git = "https://github.com/aurora-is-near/aurora-engine.git", tag = "3.5.0", default-features = false }
+aurora-engine-types = { git = "https://github.com/aurora-is-near/aurora-engine.git", tag = "3.8.0", default-features = false }
 serde = "1"
 serde_json = "1"
 serde_derive = "1"
 base64 = "0.20"
-near-jsonrpc-client = "0.6"
-near-jsonrpc-primitives = "0.17"
-near-primitives = "0.17"
-near-sdk = "4.1"
+borsh = "1.5.1"
+near-jsonrpc-client = "0.16.0"
+near-jsonrpc-primitives = "0.29.1"
+near-primitives = "0.29.1"
+near-sdk = "5.7.0"
 anyhow = "1.0"
 tokio = { version = "1", features = ["full"] }
 clap = { version = "4.0", features = ["cargo"] }
-near-crypto = "0.17"
+near-crypto = "0.29.1"
 libc = "0.2"
 
 [features]

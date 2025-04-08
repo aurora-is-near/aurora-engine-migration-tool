@@ -4,7 +4,7 @@
 use near_jsonrpc_client::{methods, JsonRpcClient, MethodCallResult};
 use near_jsonrpc_primitives::types::query::QueryResponseKind;
 use near_primitives::hash::CryptoHash;
-use near_primitives::transaction::{Action, FunctionCallAction, Transaction};
+use near_primitives::transaction::{Action, FunctionCallAction, Transaction, TransactionV0};
 use near_primitives::types::{BlockHeight, BlockReference};
 use near_primitives::views::{ActionView, ChunkHeaderView, FinalExecutionStatus};
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
@@ -130,14 +130,13 @@ impl Client {
         let block = self
             .call(methods::block::RpcBlockRequest { block_reference })
             .await
-            .map_err(|e| {
+            .inspect_err(|_e| {
                 let mut msg = "Failed get block".to_string();
                 if let BlockKind::Height(height) = bloch_kind {
                     self.unresolved_blocks.insert(height);
                     msg = format!("{msg}: {height:?}");
                 }
                 print_log(&msg);
-                e
             })?;
 
         Ok((
@@ -199,7 +198,9 @@ impl Client {
                 #[derive(Debug, Deserialize)]
                 pub struct FtTransferArgs {
                     pub receiver_id: AccountId,
+                    #[allow(dead_code)]
                     pub amount: U128,
+                    #[allow(dead_code)]
                     pub memo: Option<String>,
                 }
                 if let Ok(res) = serde_json::from_slice::<FtTransferArgs>(args) {
@@ -214,8 +215,11 @@ impl Client {
                 #[derive(Debug, Deserialize)]
                 pub struct FtTransferCallArgs {
                     pub receiver_id: AccountId,
+                    #[allow(dead_code)]
                     pub amount: U128,
+                    #[allow(dead_code)]
                     pub memo: Option<String>,
+                    #[allow(dead_code)]
                     pub msg: String,
                 }
                 if let Ok(res) = serde_json::from_slice::<FtTransferCallArgs>(args) {
@@ -230,32 +234,11 @@ impl Client {
                 print_log(" Withdraw");
                 vec![]
             }
-            "finish_deposit" => {
-                #[derive(Debug, Clone, BorshDeserialize)]
-                pub struct FinishDepositArgs {
-                    pub new_owner_id: AccountId,
-                    pub amount: u128,
-                    pub proof_key: String,
-                    pub relayer_id: AccountId,
-                    pub fee: u128,
-                    pub msg: Option<Vec<u8>>,
-                }
-                if let Ok(res) = FinishDepositArgs::try_from_slice(args) {
-                    print_log("finish_deposit");
-                    vec![res.new_owner_id, res.relayer_id]
-                } else {
-                    print_log("Failed deserialize FinishDepositArgs");
-                    vec![]
-                }
-            }
-            "deposit" => {
-                print_log("deposit");
-                vec![]
-            }
             "storage_deposit" => {
                 #[derive(Debug, Clone, Deserialize)]
                 pub struct StorageDepositArgs {
                     pub account_id: Option<AccountId>,
+                    #[allow(dead_code)]
                     pub registration_only: Option<bool>,
                 }
                 if let Ok(res) = serde_json::from_slice::<StorageDepositArgs>(args) {
@@ -434,8 +417,8 @@ impl Client {
             .call(methods::query::RpcQueryRequest {
                 block_reference: BlockReference::latest(),
                 request: near_primitives::views::QueryRequest::ViewAccessKey {
-                    account_id: signer.account_id.clone(),
-                    public_key: signer.public_key.clone(),
+                    account_id: signer.get_account_id().clone(),
+                    public_key: signer.public_key().clone(),
                 },
             })
             .await?;
@@ -447,23 +430,23 @@ impl Client {
         };
 
         // Prepare transaction to commit
-        let transaction = Transaction {
-            signer_id: signer.account_id.clone(),
-            public_key: signer.public_key.clone(),
+        let transaction = Transaction::V0(TransactionV0 {
+            signer_id: signer.get_account_id().clone(),
+            public_key: signer.public_key().clone(),
             nonce: current_nonce + 1,
             receiver_id: contract.parse()?,
             block_hash: access_key_query_response.block_hash,
-            actions: vec![Action::FunctionCall(FunctionCallAction {
+            actions: vec![Action::FunctionCall(Box::from(FunctionCallAction {
                 method_name: method,
                 args,
                 gas: GAS_FOR_COMMIT_TX,
                 deposit: 0,
-            })],
-        };
+            }))],
+        });
 
         println!(
             "nonce: {}, tx_hash: {:#?}",
-            transaction.nonce,
+            transaction.nonce(),
             transaction.get_hash_and_size().0
         );
 

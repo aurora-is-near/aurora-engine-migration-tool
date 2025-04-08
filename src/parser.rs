@@ -1,7 +1,7 @@
 use aurora_engine_migration_tool::{BlockData, FungibleToken, StateData};
 use aurora_engine_types::storage::{bytes_to_key, EthConnectorStorageId, KeyPrefix};
 use aurora_engine_types::types::NEP141Wei;
-use near_sdk::borsh::{BorshDeserialize, BorshSerialize};
+use near_sdk::borsh::BorshDeserialize;
 use near_sdk::AccountId;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -97,12 +97,11 @@ pub fn parse<P: AsRef<Path>>(json_file: P, output: Option<P>) -> anyhow::Result<
     );
 
     // Store result data
-    StateData {
+    borsh::to_vec(&StateData {
         total_supply,
         total_stuck_supply,
         accounts,
-    }
-    .try_to_vec()
+    })
     .and_then(|data| std::fs::write(result_file_name, data))
     .map_err(|e| anyhow::anyhow!("Failed save result data, {e}"))
 }
