@@ -19,14 +19,17 @@ serde_json = "1"
 serde_derive = "1"
 base64 = "0.20"
 borsh = "1.5.1"
-near-jsonrpc-client = "0.16.0"
-near-jsonrpc-primitives = "0.29.1"
-near-primitives = "0.29.1"
+near-jsonrpc-client = "0.15.0"
+near-jsonrpc-primitives = "0.28.0"
+near-primitives = "0.28.0"
 near-sdk = "5.7.0"
+near-lake-framework = "0.7.11"
 anyhow = "1.0"
 tokio = { version = "1", features = ["full"] }
+tokio-stream = "0.1"
+futures = "0.3.31"
 clap = { version = "4.0", features = ["cargo"] }
-near-crypto = "0.29.1"
+near-crypto = "0.28.0"
 libc = "0.2"
 
 [features]

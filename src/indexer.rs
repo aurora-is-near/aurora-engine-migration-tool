@@ -1,4 +1,7 @@
 use crate::rpc::{BlockKind, Client, IndexedData};
+use futures::StreamExt;
+use near_lake_framework::near_indexer_primitives::StreamerMessage;
+use near_lake_framework::LakeConfigBuilder;
 use near_primitives::hash::CryptoHash;
 use near_primitives::types::BlockHeight;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
@@ -7,8 +10,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tokio::signal::unix::SignalKind;
-use tokio::time::{sleep, Instant};
+use tokio::time::Instant;
 
 const SAVE_FILE_TIMEOUT: Duration = Duration::from_secs(60);
 const FORWARD_BLOCK_TIMEOUT: Duration = Duration::from_secs(120);
@@ -143,127 +145,67 @@ impl Indexer {
         data.last_block_hash = Some(block_hash);
     }
 
-    fn shutdown_listener() -> tokio::sync::mpsc::Receiver<()> {
-        use tokio::signal;
-        async fn send_msg(tx: tokio::sync::mpsc::Sender<()>) {
-            println!("\n[Waiting shutdown]");
-            let _ = tx.send(()).await;
-        }
-
-        let (tx, rx) = tokio::sync::mpsc::channel(1);
-        let mut terminate = signal::unix::signal(SignalKind::terminate()).unwrap();
-        let mut interrupt = signal::unix::signal(SignalKind::interrupt()).unwrap();
-        let mut quit = signal::unix::signal(SignalKind::quit()).unwrap();
-        let mut tstp = signal::unix::signal(SignalKind::from_raw(libc::SIGTSTP)).unwrap();
-
-        tokio::spawn(async move {
-            tokio::select! {
-                _ = signal::ctrl_c() => send_msg(tx).await,
-                _ = terminate.recv() => send_msg(tx).await,
-                _ = interrupt.recv() => send_msg(tx).await,
-                _ = quit.recv() => send_msg(tx).await,
-                _ = tstp.recv() => send_msg(tx).await,
-            }
-        });
-        rx
-    }
-
     /// Run indexing
     pub async fn run(&mut self) -> anyhow::Result<()> {
-        let mut client = Client::new();
-        let missed_blocks = self.data.lock().unwrap().missed_blocks.clone();
-        client.set_missed_blocks(missed_blocks);
-        let last_block = self.data.lock().unwrap().last_block;
-        println!("Starting height: {last_block}");
-        let mut handle = None;
-
-        let mut shutdown_stream = Self::shutdown_listener();
-        loop {
-            tokio::select! {
-                h = self.handle_block(&mut client) => handle = h,
-                _ = shutdown_stream.recv() => break,
-                else => break,
-            }
-        }
-
-        // Wait for data saving
-        if let Some(handle) = handle {
-            handle.await.map_err(Into::into)
-        } else {
-            Ok(())
-        }
-    }
-
-    /// Handle fetching blocks
-    async fn handle_block(&mut self, client: &mut Client) -> Option<tokio::task::JoinHandle<()>> {
         let last_block = self.data.lock().unwrap().last_block + 1;
-        let first_block = self.data.lock().unwrap().first_block;
-        let mut current_height = self.forward_block.unwrap_or_default();
+        println!("Starting height: {last_block}");
 
-        if self.forward_block.is_none() || self.last_forward_time.elapsed() > FORWARD_BLOCK_TIMEOUT
-        {
-            self.last_forward_time = Instant::now();
-            if let Ok(block) = client.get_block(BlockKind::Latest).await {
-                self.forward_block = Some(block.0);
-                current_height = block.0
+        let lake_config = {
+            let lake_builder = LakeConfigBuilder::default().start_block_height(last_block);
+            if cfg!(feature = "mainnet") {
+                lake_builder.mainnet().build()?
+            } else if cfg!(feature = "testnet") {
+                lake_builder.testnet().build()?
+            } else {
+                anyhow::bail!("Either 'mainnet' or 'testnet' feature must be enabled.");
             }
-        }
-
-        let block = if last_block > current_height {
-            println!("Reached the latest block. Sleep: {FORWARD_BLOCK_TIMEOUT:?}");
-            sleep(FORWARD_BLOCK_TIMEOUT).await;
-            None
-        } else if let Ok(block) = client.get_block(BlockKind::Height(last_block)).await {
-            Some(block)
-        } else {
-            // If block not found do not fail, just increment height
-            let mut data = self.data.lock().unwrap();
-            data.last_block = last_block;
-            None
         };
 
-        let (_, chunks, block_hash, prev_block_hash) = block?;
+        let (_, stream_receiver) = near_lake_framework::streamer(lake_config);
+        let mut stream = tokio_stream::wrappers::ReceiverStream::new(stream_receiver);
 
-        let last_block_hash = self.data.lock().unwrap().last_block_hash;
-        if let Some(block_hash) = last_block_hash {
-            if block_hash != prev_block_hash {
-                let mut data = self.data.lock().unwrap();
-                data.last_block = data.last_handled_block;
-                return None;
-            }
+        let mut client = Client::new();
+
+        while let Some(streamer_message) = stream.next().await {
+            self.handle_streamer_message(streamer_message, &mut client)
+                .await;
         }
+        Ok(())
+    }
 
-        print!("\rHeight: {last_block:?}");
+    async fn handle_streamer_message(
+        &mut self,
+        streamer_message: StreamerMessage,
+        client: &mut Client,
+    ) {
+        let first_block = self.data.lock().unwrap().first_block;
+        let last_block = self.data.lock().unwrap().last_block + 1;
+        print!("\rHeight: {:?}", last_block);
         std::io::stdout().flush().expect("Flush failed");
 
+        let chunks = streamer_message.block.chunks;
         let indexed_data = client.get_chunk_indexed_data(chunks, last_block).await;
         self.set_indexed_data(
             indexed_data,
             client.unresolved_blocks.clone(),
-            current_height,
+            streamer_message.block.header.height,
             first_block,
             last_block,
-            block_hash,
+            streamer_message.block.header.hash,
         );
 
-        // Save data
         if self.last_saved_time.elapsed() > SAVE_FILE_TIMEOUT {
             self.last_saved_time = Instant::now();
-            let current_block_height = current_height;
             let data_file = self.data_file.clone();
             let data = self.data.lock().unwrap().clone();
 
-            Some(tokio::spawn(async move {
-                Self::save_data(
-                    &data,
-                    &data_file,
-                    current_block_height,
-                    first_block,
-                    last_block,
-                );
-            }))
-        } else {
-            None
+            Self::save_data(
+                &data,
+                &data_file,
+                streamer_message.block.header.height,
+                first_block,
+                last_block,
+            );
         }
     }
 }

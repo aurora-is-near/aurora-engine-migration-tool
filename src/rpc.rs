@@ -1,6 +1,7 @@
 //! # RPC
 //! RPC toolset for effective communication with near-rpc for specific network.
 //!
+use near_crypto::Signer;
 use near_jsonrpc_client::{methods, JsonRpcClient, MethodCallResult};
 use near_jsonrpc_primitives::types::query::QueryResponseKind;
 use near_primitives::hash::CryptoHash;
@@ -417,7 +418,7 @@ impl Client {
             .call(methods::query::RpcQueryRequest {
                 block_reference: BlockReference::latest(),
                 request: near_primitives::views::QueryRequest::ViewAccessKey {
-                    account_id: signer.get_account_id().clone(),
+                    account_id: signer.account_id.clone(),
                     public_key: signer.public_key().clone(),
                 },
             })
@@ -431,7 +432,7 @@ impl Client {
 
         // Prepare transaction to commit
         let transaction = Transaction::V0(TransactionV0 {
-            signer_id: signer.get_account_id().clone(),
+            signer_id: signer.account_id.clone(),
             public_key: signer.public_key().clone(),
             nonce: current_nonce + 1,
             receiver_id: contract.parse()?,
@@ -451,7 +452,7 @@ impl Client {
         );
 
         let request = methods::broadcast_tx_commit::RpcBroadcastTxCommitRequest {
-            signed_transaction: transaction.sign(&signer),
+            signed_transaction: transaction.sign(&Signer::InMemory(signer.clone())),
         };
 
         let mut retry = 0;
