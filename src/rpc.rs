@@ -6,14 +6,13 @@ use near_jsonrpc_primitives::types::query::QueryResponseKind;
 use near_primitives::hash::CryptoHash;
 use near_primitives::transaction::{Action, FunctionCallAction, Transaction, TransactionV0};
 use near_primitives::types::{BlockHeight, BlockReference};
-use near_primitives::views::{ActionView, ChunkHeaderView, FinalExecutionStatus};
+use near_primitives::views::{ActionView, ChunkHeaderView, TxExecutionStatus};
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::U128;
 use near_sdk::AccountId;
 use std::collections::HashSet;
 use std::str::FromStr;
 use std::time::Duration;
-
 use self::error::CommitTx;
 
 #[cfg(feature = "mainnet")]
@@ -53,6 +52,7 @@ const ACTION_METHODS: &[&str] = &[
     "storage_unregister",
 ];
 
+#[derive(Clone)]
 pub struct Client {
     /// NEAR-rpc client
     pub client: JsonRpcClient,
@@ -394,6 +394,41 @@ impl Client {
         results
     }
 
+
+
+    pub async fn wait_tx_finish(&self, tx_hash: CryptoHash) -> anyhow::Result<()> {
+        let mut retry = 0;
+        loop {
+            let request = methods::tx::RpcTransactionStatusRequest {
+                transaction_info: methods::tx::TransactionInfo::TransactionId {
+                    tx_hash,
+                    sender_account_id: AURORA_CONTRACT.parse()?,
+                },
+                wait_until: TxExecutionStatus::Final,
+            };
+            retry += 1;
+
+            match self.client.call(request).await {
+                Ok(response) if matches!(response.final_execution_status, TxExecutionStatus::Final) => {
+                    return Ok(());
+                }
+                Ok(_) => {
+                    println!("transaction: {tx_hash} is not finalized");
+                }
+                Err(e) => {
+                    println!("error getting transaction: {tx_hash} status: {e:?}");
+                }
+            }
+
+            if retry > 5 {
+                println!("transaction: {tx_hash} failed after 5 retries");
+                return Err(anyhow::anyhow!("transaction: {tx_hash} failed after 5 retries"));
+            }
+
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+    }
+
     /// Commit transaction and wait respond. It should retry if it's fail
     /// for some reason.
     /// Return error if request call failed, or status type not Success
@@ -405,7 +440,7 @@ impl Client {
         contract: String,
         method: String,
         args: Vec<u8>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<CryptoHash> {
         // Get signer key for Tx commit
         let signer = near_crypto::InMemorySigner::from_secret_key(
             signer_account_id.parse()?,
@@ -450,15 +485,15 @@ impl Client {
             transaction.get_hash_and_size().0
         );
 
-        let request = methods::broadcast_tx_commit::RpcBroadcastTxCommitRequest {
+        let request = methods::broadcast_tx_async::RpcBroadcastTxAsyncRequest {
             signed_transaction: transaction.sign(&signer),
         };
-
         let mut retry = 0;
         // Trying commit tx with retry if failed
+
         loop {
             // Commit tx
-            let mut res = self
+            let res = self
                 .client
                 .call(&request)
                 .await
@@ -467,16 +502,18 @@ impl Client {
             // Check response and set errors if it needs
             if let Ok(tx_res) = res {
                 // If success - check response status
-                match tx_res.status {
-                    FinalExecutionStatus::SuccessValue(_) => return Ok(()),
-                    FinalExecutionStatus::Failure(err) => {
-                        res = Err(CommitTx::Status(format!("{err:?}")));
-                    }
-                    _ => res = Err(CommitTx::Status("Other".to_string())),
-                }
+                // match tx_res {
+                //     FinalExecutionStatus::SuccessValue(_) => return Ok(()),
+                //     FinalExecutionStatus::Failure(err) => {
+                //         res = Err(CommitTx::Status(format!("{err:?}")));
+                //     }
+                //     _ => res = Err(CommitTx::Status("Other".to_string())),
+                // }
+                return Ok(tx_res);
             }
 
             // If request failed for some reason - retry request
+            tokio::time::sleep(Duration::from_millis(500)).await;
             retry += 1;
             println!("\nRequest retry: {retry:?}");
             // If all retries failed it's incident, just panic

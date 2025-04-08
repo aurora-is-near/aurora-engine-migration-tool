@@ -3,7 +3,8 @@ use aurora_engine_migration_tool::StateData;
 use aurora_engine_types::types::NEP141Wei;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::U128;
-use near_sdk::AccountId;
+use near_primitives::hash::CryptoHash;
+use near_sdk::{AccountId};
 use serde_json::json;
 use std::collections::HashMap;
 use std::io::Write;
@@ -68,8 +69,8 @@ impl Migration {
         migration_data: Vec<u8>,
         msg: &str,
         counter: usize,
-    ) -> anyhow::Result<()> {
-        self.client
+    ) -> anyhow::Result<CryptoHash> {
+        let hash = self.client
             .commit_tx(
                 self.config.signer_account_id.clone().unwrap(),
                 self.config.signer_secret_key.clone().unwrap(),
@@ -80,7 +81,7 @@ impl Migration {
             .await?;
         print!("\r{msg}: {counter}");
         std::io::stdout().flush()?;
-        Ok(())
+        Ok(hash)
     }
 
     /// Send request to check migration correctness
@@ -209,17 +210,31 @@ impl Migration {
         println!("Num of batches: {}", reproducible_data_for_accounts.len());
         for (index, (accounts, accounts_count)) in reproducible_data_for_accounts.iter().enumerate()
         {
-            let migration_data: Vec<AccountId> = accounts.keys().cloned().collect();
-            println!(
-                "commit_migration_batch: {index}, num_of_accounts: {}",
-                migration_data.len()
-            );
-            self.commit_migration(
-                borsh::to_vec(&migration_data).expect("Failed serialize"),
-                "Accounts",
-                *accounts_count,
-            )
-            .await?;
+
+            for _ in 0..10 {
+                let mut checker = tokio::task::JoinSet::new();
+
+                let migration_data: Vec<AccountId> = accounts.keys().cloned().collect();
+                println!(
+                    "commit_migration_batch: {index}, num_of_accounts: {}",
+                    migration_data.len()
+                );
+                let hash = self.commit_migration(
+                    borsh::to_vec(&migration_data).expect("Failed serialize"),
+                    "Accounts",
+                    *accounts_count,
+                )
+                    .await?;
+                let client = self.client.clone();
+                let _ = checker.spawn(async move {
+                    client.wait_tx_finish(hash).await
+                });
+
+                for result in checker.join_all().await {
+                    result?;
+                }
+            }
+
         }
 
         self.check_migration_full(reproducible_data_for_accounts)
