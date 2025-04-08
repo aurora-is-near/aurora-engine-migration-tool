@@ -1,19 +1,25 @@
-use crate::rpc::{BlockKind, Client, IndexedData};
+use crate::rpc::{
+    ActionResult, ActionResultLog, BlockKind, Client, IndexedData, IndexedResultLog,
+    ACTION_METHODS, AURORA_CONTRACT,
+};
 use futures::StreamExt;
-use near_lake_framework::near_indexer_primitives::StreamerMessage;
+use near_lake_framework::near_indexer_primitives::{IndexerShard, StreamerMessage};
 use near_lake_framework::LakeConfigBuilder;
 use near_primitives::hash::CryptoHash;
 use near_primitives::types::BlockHeight;
+use near_primitives::views::ActionView;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
+use near_sdk::json_types::U128;
+use near_sdk::AccountId;
 use std::collections::HashSet;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::time::Instant;
 
 const SAVE_FILE_TIMEOUT: Duration = Duration::from_secs(60);
-const FORWARD_BLOCK_TIMEOUT: Duration = Duration::from_secs(120);
 
 // Information about indexed data that is saved to a file
 // and will be loaded from the file when the program restarts.
@@ -164,30 +170,24 @@ impl Indexer {
         let (_, stream_receiver) = near_lake_framework::streamer(lake_config);
         let mut stream = tokio_stream::wrappers::ReceiverStream::new(stream_receiver);
 
-        let mut client = Client::new();
-
         while let Some(streamer_message) = stream.next().await {
-            self.handle_streamer_message(streamer_message, &mut client)
-                .await;
+            self.handle_streamer_message(streamer_message).await;
         }
         Ok(())
     }
 
-    async fn handle_streamer_message(
-        &mut self,
-        streamer_message: StreamerMessage,
-        client: &mut Client,
-    ) {
+    async fn handle_streamer_message(&mut self, streamer_message: StreamerMessage) {
         let first_block = self.data.lock().unwrap().first_block;
         let last_block = self.data.lock().unwrap().last_block + 1;
         print!("\rHeight: {:?}", last_block);
         std::io::stdout().flush().expect("Flush failed");
 
-        let chunks = streamer_message.block.chunks;
-        let indexed_data = client.get_chunk_indexed_data(chunks, last_block).await;
+        let (indexed_data, unresolved_blocks) = self
+            .get_chunk_indexed_data(streamer_message.shards, last_block)
+            .await;
         self.set_indexed_data(
             indexed_data,
-            client.unresolved_blocks.clone(),
+            unresolved_blocks,
             streamer_message.block.header.height,
             first_block,
             last_block,
@@ -207,5 +207,223 @@ impl Indexer {
                 last_block,
             );
         }
+    }
+
+    pub fn parse_action_argument(&self, method: &str, args: &[u8]) -> Vec<AccountId> {
+        use serde::Deserialize;
+
+        fn print_log(msg: &str) {
+            #[cfg(feature = "log")]
+            // Print with space shift
+            println!(" {msg}");
+        }
+
+        match method {
+            "ft_transfer" => {
+                #[derive(Debug, Deserialize)]
+                pub struct FtTransferArgs {
+                    pub receiver_id: AccountId,
+                    #[allow(dead_code)]
+                    pub amount: U128,
+                    #[allow(dead_code)]
+                    pub memo: Option<String>,
+                }
+                if let Ok(res) = serde_json::from_slice::<FtTransferArgs>(args) {
+                    print_log("ft_transfer");
+                    vec![res.receiver_id]
+                } else {
+                    print_log(" Failed deserialize FtTransferArgs");
+                    vec![]
+                }
+            }
+            "ft_transfer_call" => {
+                #[derive(Debug, Deserialize)]
+                pub struct FtTransferCallArgs {
+                    pub receiver_id: AccountId,
+                    #[allow(dead_code)]
+                    pub amount: U128,
+                    #[allow(dead_code)]
+                    pub memo: Option<String>,
+                    #[allow(dead_code)]
+                    pub msg: String,
+                }
+                if let Ok(res) = serde_json::from_slice::<FtTransferCallArgs>(args) {
+                    print_log("ft_transfer_call");
+                    vec![res.receiver_id]
+                } else {
+                    print_log("Failed deserialize FtTransferCallArgs");
+                    vec![]
+                }
+            }
+            "withdraw" => {
+                print_log(" Withdraw");
+                vec![]
+            }
+            "storage_deposit" => {
+                #[derive(Debug, Clone, Deserialize)]
+                pub struct StorageDepositArgs {
+                    pub account_id: Option<AccountId>,
+                    #[allow(dead_code)]
+                    pub registration_only: Option<bool>,
+                }
+                if let Ok(res) = serde_json::from_slice::<StorageDepositArgs>(args) {
+                    print_log("storage_deposit");
+                    if let Some(account_id) = res.account_id {
+                        vec![account_id]
+                    } else {
+                        vec![]
+                    }
+                } else {
+                    print_log("Failed deserialize FinishDepositArgs");
+                    vec![]
+                }
+            }
+            "storage_withdraw" => {
+                print_log("storage_withdraw");
+                vec![]
+            }
+            "storage_unregister" => {
+                print_log("storage_unregister");
+                vec![]
+            }
+            _ => vec![],
+        }
+    }
+    fn get_actions_data(&mut self, actions: Vec<ActionView>) -> ActionResult {
+        let mut result = ActionResult::default();
+
+        for action in actions {
+            // Check action method and filter it
+            if let ActionView::FunctionCall {
+                method_name, args, ..
+            } = action
+            {
+                if ACTION_METHODS.contains(&method_name.as_str()) {
+                    let accounts = self.parse_action_argument(&method_name, &args);
+
+                    result.is_action_found = true;
+                    result.log.push(ActionResultLog {
+                        accounts: accounts.clone(),
+                        method: method_name,
+                    });
+                    result.accounts.extend(accounts);
+                }
+            }
+        }
+
+        result
+    }
+
+    async fn get_chunk_indexed_data(
+        &mut self,
+        shards: Vec<IndexerShard>,
+        block_height: BlockHeight,
+    ) -> (IndexedData, HashSet<BlockHeight>) {
+        let mut results = IndexedData {
+            accounts: HashSet::new(),
+            logs: vec![],
+        };
+
+        let mut unresolved_blocks = HashSet::new();
+
+        // Fetch all chunks from block
+        for shard in shards {
+            // Get chunk data
+            let Some(chunk_data) = shard.chunk else {
+                unresolved_blocks.insert(block_height);
+                continue;
+            };
+
+            // Fetch chunk transactions
+            for tx in &chunk_data.transactions {
+                // We should process only specific receiver
+                if tx.transaction.receiver_id.as_str() != AURORA_CONTRACT {
+                    continue;
+                }
+                // Get actions from transaction
+                let res = self.get_actions_data(tx.transaction.actions.clone());
+
+                // Added predecessor account. It's especially important
+                // for `withdraw`, `ft_transfer`, `ft_transfer_call`
+                // and all `storage_deposit`,`storage_withdraw`,
+                // `storage_unregister`
+                if res.is_action_found {
+                    results
+                        .accounts
+                        .insert(AccountId::from_str(tx.transaction.signer_id.as_str()).unwrap());
+                    results.accounts.insert(AURORA_CONTRACT.parse().unwrap());
+
+                    let mut log = res.log;
+                    if !log.is_empty() {
+                        log[0]
+                            .accounts
+                            .push(AccountId::from_str(tx.transaction.signer_id.as_str()).unwrap());
+                        log[0].accounts.push(AURORA_CONTRACT.parse().unwrap());
+                    }
+                    results.logs.push(IndexedResultLog {
+                        block_height,
+                        actions: log,
+                    });
+                }
+                for account in res.accounts {
+                    results.accounts.insert(account);
+                }
+            }
+
+            // Fetch chunk transactions for receipts
+            for receipt in &chunk_data.receipts {
+                // We should process only specific receiver
+                if receipt.receiver_id.as_str() != AURORA_CONTRACT {
+                    continue;
+                }
+
+                // Get actions accounts from receipt
+                if let near_primitives::views::ReceiptEnumView::Action {
+                    signer_id, actions, ..
+                } = receipt.receipt.clone()
+                {
+                    let res = self.get_actions_data(actions);
+                    // Added predecessor_account_id.
+                    // NOTE: same notice as before about importance
+                    // for that field.
+                    if res.is_action_found {
+                        results
+                            .accounts
+                            .insert(AccountId::from_str(signer_id.as_str()).unwrap());
+                        results
+                            .accounts
+                            .insert(AccountId::from_str(receipt.predecessor_id.as_str()).unwrap());
+                        results
+                            .accounts
+                            .insert(AccountId::from_str(receipt.receiver_id.as_str()).unwrap());
+
+                        let mut log = res.log;
+                        if !log.is_empty() {
+                            log[0]
+                                .accounts
+                                .push(AccountId::from_str(signer_id.as_str()).unwrap());
+                            log[0].accounts.push(
+                                AccountId::from_str(receipt.predecessor_id.as_str()).unwrap(),
+                            );
+                            log[0]
+                                .accounts
+                                .push(AccountId::from_str(receipt.receiver_id.as_str()).unwrap());
+                        }
+                        results.logs.push(IndexedResultLog {
+                            block_height,
+                            actions: log,
+                        });
+                    }
+                    for account in res.accounts {
+                        results.accounts.insert(account);
+                    }
+                }
+            }
+        }
+        // Flow passed successfully - remove block
+        if unresolved_blocks.contains(&block_height) {
+            unresolved_blocks.remove(&block_height);
+        }
+        (results, unresolved_blocks)
     }
 }
